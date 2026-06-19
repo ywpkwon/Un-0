@@ -339,4 +339,6 @@ def test_conditional_drift_loss_golden_value_unchanged() -> None:
         x_real, x_gen, cls, cls, dino=dino,
         dino_weight=0.911, pixel_weight=0.114, gamma=0.2, image_size=32,
     )
-    assert float(total) == pytest.approx(0.28404372930526733, rel=0, abs=1e-9)
+    # rel tolerance, not abs=1e-9: CPU reduction order varies run-to-run, so the
+    # value wobbles at ~1e-7. A real regression moves it by percent-level.
+    assert float(total) == pytest.approx(0.28404372930526733, rel=1e-4)
