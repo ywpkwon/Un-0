@@ -95,8 +95,8 @@ def build_parser() -> argparse.ArgumentParser:
             "prefix so per-epoch LR matches the full run."
         ),
     )
-    parser.add_argument("--batch-size", type=int, default=16384)
-    parser.add_argument("--lr", type=float, default=7e-4)
+    parser.add_argument("--batch-size", type=int, default=2048)
+    parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument(
         "--precision", choices=("fp32", "tf32", "bf16", "fp16"), default="bf16"
     )
