@@ -597,7 +597,7 @@ def build_imagenet64_model(
 
 # Only this repo id changes when checkpoints move to the official hub; the
 # filenames and names below are stable.
-_HF_REPO = "un-ai/Un0"
+_HF_REPO = "un-ai/Un-0"
 
 # name -> (filename, family)
 _PRETRAINED: dict[str, tuple[str, str]] = {
