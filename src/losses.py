@@ -69,9 +69,7 @@ def _drift_target_for_class(
     dist_neg = dist_neg / scale_view + self_mask * 1e6
 
     logits = torch.cat([-dist_pos, -dist_neg], dim=-1)
-    logits_t = (
-        logits.unsqueeze(0) / temperatures.view(-1, 1, 1, 1)
-    ).to(dtype=gen_c_d.dtype)
+    logits_t = (logits.unsqueeze(0) / temperatures.view(-1, 1, 1, 1)).to(dtype=gen_c_d.dtype)
     a_row = torch.softmax(logits_t, dim=-1)
     a_col = torch.softmax(logits_t, dim=-2)
     assignment = torch.sqrt((a_row * a_col).clamp_min(eps))
@@ -126,9 +124,7 @@ def conditional_drift_loss_for_views(
 
     pos_stack = torch.stack([v for (v, _) in view_pairs], dim=0)
     gen_stack = torch.stack([g for (_, g) in view_pairs], dim=0)
-    gamma_stack = (
-        torch.stack(gamma_views, dim=0) if gamma_views is not None else pos_stack
-    )
+    gamma_stack = torch.stack(gamma_views, dim=0) if gamma_views is not None else pos_stack
 
     total = view_pairs[0][1].new_zeros(())
     valid_classes = 0
@@ -170,15 +166,22 @@ def conditional_drift_loss_for_views(
             pos_c = pos_stack[:, pos_c_idx, :].detach().to(dtype=compute_dtype)
             gen_c_d = gen_stack[:, gen_c_idx, :].detach().to(dtype=compute_dtype)
             if other_perm is not None:
-                other = gamma_stack[:, other_perm, :].detach().to(
-                    dtype=compute_dtype,
+                other = (
+                    gamma_stack[:, other_perm, :]
+                    .detach()
+                    .to(
+                        dtype=compute_dtype,
+                    )
                 )
                 neg_c = torch.cat([gen_c_d, other], dim=1)
             else:
                 neg_c = gen_c_d
             target = drift_target_fn(
-                gen_c_d, pos_c, neg_c,
-                n_gen_c=n_gen_c, temperatures=temperatures_t,
+                gen_c_d,
+                pos_c,
+                neg_c,
+                n_gen_c=n_gen_c,
+                temperatures=temperatures_t,
             )
 
         target_cast = target.to(dtype=compute_dtype)
@@ -199,9 +202,7 @@ class DINOFeatureExtractor(nn.Module):
     def __init__(self, *, antialias: bool = True) -> None:
         """Load and freeze the DINOv2 backbone."""
         super().__init__()
-        self.backbone = torch.hub.load(
-            "facebookresearch/dinov2", "dinov2_vits14"
-        )
+        self.backbone = torch.hub.load("facebookresearch/dinov2", "dinov2_vits14")
         self.register_buffer(
             "imagenet_mean",
             torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1),
@@ -238,9 +239,7 @@ class DINOFeatureExtractor(nn.Module):
             self.imagenet_std.to(images.dtype)
         )
         interp_dtype = images.dtype
-        images_for_interp = (
-            images.float() if interp_dtype != torch.float32 else images
-        )
+        images_for_interp = images.float() if interp_dtype != torch.float32 else images
         images = F.interpolate(
             images_for_interp,
             size=(224, 224),
@@ -250,14 +249,14 @@ class DINOFeatureExtractor(nn.Module):
         ).to(dtype=interp_dtype)
 
         features = self.backbone.get_intermediate_layers(
-            images, n=4, return_class_token=True,
+            images,
+            n=4,
+            return_class_token=True,
         )
         output: list[Tensor] = []
         for patch_tokens, cls_token in features:
             pooled_patches = _pool_dino_patches(patch_tokens)
-            output.extend(
-                pooled_patches[:, :, i, j] for i in range(4) for j in range(4)
-            )
+            output.extend(pooled_patches[:, :, i, j] for i in range(4) for j in range(4))
             output.append(F.normalize(cls_token, p=2, dim=1))
         return output
 
@@ -267,11 +266,12 @@ def _pool_dino_patches(patch_tokens: Tensor) -> Tensor:
     patches = F.normalize(patch_tokens, p=2, dim=2)
     grid_size = math.isqrt(int(patches.shape[1]))
     if grid_size * grid_size != int(patches.shape[1]):
-        raise ValueError(
-            f"Expected square DINO patch grid, got {patches.shape[1]}."
-        )
+        raise ValueError(f"Expected square DINO patch grid, got {patches.shape[1]}.")
     patches = patches.reshape(
-        patches.shape[0], grid_size, grid_size, patches.shape[2],
+        patches.shape[0],
+        grid_size,
+        grid_size,
+        patches.shape[2],
     ).permute(0, 3, 1, 2)
     return F.adaptive_avg_pool2d(patches, output_size=(4, 4))
 
@@ -287,17 +287,11 @@ def extract_feature_views(
     outputs_by_view: list[list[Tensor]] | None = None
     for chunk in x_flat.split(batch_size):
         chunk_outputs = extractor(chunk, image_size=image_size)
-        views = (
-            [chunk_outputs]
-            if isinstance(chunk_outputs, Tensor)
-            else chunk_outputs
-        )
+        views = [chunk_outputs] if isinstance(chunk_outputs, Tensor) else chunk_outputs
         if outputs_by_view is None:
             outputs_by_view = [[] for _ in views]
         if len(outputs_by_view) != len(views):
-            raise ValueError(
-                "Feature extractor returned inconsistent view counts."
-            )
+            raise ValueError("Feature extractor returned inconsistent view counts.")
         for index, view in enumerate(views):
             outputs_by_view[index].append(view)
     if outputs_by_view is None:
@@ -469,26 +463,38 @@ class PerClassQueue:
         self.track_sample_ids = bool(track_sample_ids)
 
         self._buffer = torch.zeros(
-            self.num_classes, self.queue_size, self.data_dim,
-            device=self.device, dtype=self.dtype,
+            self.num_classes,
+            self.queue_size,
+            self.data_dim,
+            device=self.device,
+            dtype=self.dtype,
         )
         self._buffer_ids = (
             torch.zeros(
-                self.num_classes, self.queue_size,
-                device=self.device, dtype=torch.long,
+                self.num_classes,
+                self.queue_size,
+                device=self.device,
+                dtype=torch.long,
             )
             if self.track_sample_ids
             else None
         )
         self._write_ptr = torch.zeros(
-            self.num_classes, device=self.device, dtype=torch.long,
+            self.num_classes,
+            device=self.device,
+            dtype=torch.long,
         )
         self._counts = torch.zeros(
-            self.num_classes, device=self.device, dtype=torch.long,
+            self.num_classes,
+            device=self.device,
+            dtype=torch.long,
         )
 
     def push(
-        self, x: Tensor, class_ids: Tensor, sample_ids: Tensor | None = None,
+        self,
+        x: Tensor,
+        class_ids: Tensor,
+        sample_ids: Tensor | None = None,
     ) -> None:
         """Push a batch into per-class FIFO slots, overwriting the oldest first.
 
@@ -501,38 +507,40 @@ class PerClassQueue:
             )
         if class_ids.ndim != 1 or class_ids.shape[0] != x.shape[0]:
             raise ValueError(
-                f"class_ids must have shape ({x.shape[0]},), got "
-                f"{tuple(class_ids.shape)}.",
+                f"class_ids must have shape ({x.shape[0]},), got {tuple(class_ids.shape)}.",
             )
         if self.track_sample_ids:
             if sample_ids is None:
                 raise ValueError("sample_ids is required when track_sample_ids.")
             if sample_ids.ndim != 1 or sample_ids.shape[0] != x.shape[0]:
                 raise ValueError(
-                    f"sample_ids must have shape ({x.shape[0]},), got "
-                    f"{tuple(sample_ids.shape)}.",
+                    f"sample_ids must have shape ({x.shape[0]},), got {tuple(sample_ids.shape)}.",
                 )
         batch = x.shape[0]
         if batch == 0:
             return
 
         x_dev = x.detach().to(
-            device=self.device, dtype=self.dtype, non_blocking=True,
+            device=self.device,
+            dtype=self.dtype,
+            non_blocking=True,
         )
         cids = class_ids.detach().to(
-            device=self.device, dtype=torch.long, non_blocking=True,
+            device=self.device,
+            dtype=torch.long,
+            non_blocking=True,
         )
 
         one_hot = F.one_hot(cids, num_classes=self.num_classes).to(torch.long)
         # intra-batch rank of each sample within its class (0-indexed).
-        intra_rank = one_hot.cumsum(dim=0)[
-            torch.arange(batch, device=self.device), cids
-        ] - 1
+        intra_rank = one_hot.cumsum(dim=0)[torch.arange(batch, device=self.device), cids] - 1
         slot = (self._write_ptr[cids] + intra_rank) % self.queue_size
         self._buffer[cids, slot] = x_dev
         if self.track_sample_ids:
             self._buffer_ids[cids, slot] = sample_ids.detach().to(
-                device=self.device, dtype=torch.long, non_blocking=True,
+                device=self.device,
+                dtype=torch.long,
+                non_blocking=True,
             )
 
         per_class = one_hot.sum(dim=0)
@@ -540,7 +548,9 @@ class PerClassQueue:
         self._counts = torch.clamp(self._counts + per_class, max=self.queue_size)
 
     def draw(
-        self, class_ids: Tensor, num_pos: int,
+        self,
+        class_ids: Tensor,
+        num_pos: int,
     ) -> tuple[Tensor, Tensor, Tensor | None]:
         """Draw ``num_pos`` samples per class without replacement.
 
@@ -567,12 +577,17 @@ class PerClassQueue:
             )
 
         cids = class_ids.detach().to(
-            device=self.device, dtype=torch.long, non_blocking=True,
+            device=self.device,
+            dtype=torch.long,
+            non_blocking=True,
         )
         counts = self._counts.index_select(0, cids)
         # Uniform without replacement: rand scores, mask invalid slots to +inf, topk smallest.
         scores = torch.rand(
-            k, self.queue_size, device=self.device, dtype=torch.float32,
+            k,
+            self.queue_size,
+            device=self.device,
+            dtype=torch.float32,
         )
         positions = torch.arange(self.queue_size, device=self.device)
         invalid = positions.unsqueeze(0) >= counts.unsqueeze(1)
@@ -581,7 +596,8 @@ class PerClassQueue:
 
         expanded_cids = cids.unsqueeze(1).expand(k, num_pos)
         samples = self._buffer[expanded_cids, top_idx].reshape(
-            k * num_pos, self.data_dim,
+            k * num_pos,
+            self.data_dim,
         )
         labels = expanded_cids.reshape(k * num_pos)
         sample_ids = None

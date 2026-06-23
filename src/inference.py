@@ -35,7 +35,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="Class ids to sample from (default: all 10).",
     )
     parser.add_argument(
-        "--samples-per-class", type=int, default=10,
+        "--samples-per-class",
+        type=int,
+        default=10,
         help="How many images to generate per class.",
     )
     parser.add_argument("--seed", type=int, default=42)
@@ -47,9 +49,7 @@ def generate(args: argparse.Namespace) -> None:
     seed_everything(int(args.seed))
     device = resolve_device("auto")
     if args.pretrained is not None:
-        model = ConditionalImplicitKuramotoGenerator.from_pretrained(
-            args.pretrained, device=device
-        )
+        model = ConditionalImplicitKuramotoGenerator.from_pretrained(args.pretrained, device=device)
     else:
         state = torch.load(args.checkpoint, map_location=device, weights_only=False)
         config = state.get("config") or {}
@@ -57,9 +57,7 @@ def generate(args: argparse.Namespace) -> None:
         # "ref_oscillator"; fall back to those so they load correctly.
         model = build_cifar10_model(
             n_oscillators=int(config.get("n_oscillators", 4096)),
-            n_conditional_oscillators=int(
-                config.get("n_conditional_oscillators", 8)
-            ),
+            n_conditional_oscillators=int(config.get("n_conditional_oscillators", 8)),
             class_dropout_prob=float(config.get("class_dropout_prob", 0.1)),
             num_steps=int(config.get("num_steps", 25)),
             decoder_in_channels=(

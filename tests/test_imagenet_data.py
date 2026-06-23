@@ -57,7 +57,11 @@ def test_dataloader_reads_imagefolder_tree(tmp_path: Path) -> None:
     root = tmp_path / "train"
     _write_tree(root, class_ids=[0, 5, 12], per_class=2)
     loader = build_imagenet64_dataloader(
-        root=str(root), batch_size=2, num_workers=0, shuffle=False, drop_last=False,
+        root=str(root),
+        batch_size=2,
+        num_workers=0,
+        shuffle=False,
+        drop_last=False,
     )
     seen_classes: set[int] = set()
     total = 0

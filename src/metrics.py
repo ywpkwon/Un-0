@@ -38,16 +38,16 @@ _IMAGENET64_VAL_STATS_NAME = "un0_imagenet64_val"
 
 
 def _class_balanced_ids(
-    num_samples: int, num_classes: int, device: torch.device,
+    num_samples: int,
+    num_classes: int,
+    device: torch.device,
 ) -> Tensor:
     """Return `num_samples` shuffled class ids with balanced class counts."""
     per_class = num_samples // num_classes
     ids = torch.arange(num_classes, device=device).repeat_interleave(per_class)
     remainder = num_samples - ids.numel()
     if remainder:
-        ids = torch.cat(
-            [ids, torch.randint(num_classes, (remainder,), device=device)]
-        )
+        ids = torch.cat([ids, torch.randint(num_classes, (remainder,), device=device)])
     return ids[torch.randperm(ids.numel(), device=device)]
 
 
@@ -63,7 +63,7 @@ def _shard_for_rank(labels: Tensor, *, rank: int, world_size: int) -> Tensor:
     remainder = n % world_size
     start = rank * base + min(rank, remainder)
     count = base + (1 if rank < remainder else 0)
-    return labels[start:start + count]
+    return labels[start : start + count]
 
 
 def _dump_samples(
@@ -85,7 +85,7 @@ def _dump_samples(
     idx = 0
     with torch.no_grad():
         for start in range(0, class_ids_all.numel(), batch_size):
-            batch_ids = class_ids_all[start:start + batch_size]
+            batch_ids = class_ids_all[start : start + batch_size]
             gen_flat = model.sample(batch_ids)
             nchw = gen_flat.reshape(-1, 3, image_size, image_size)
             normalized = ((nchw + 1.0) * 0.5).clamp(0.0, 1.0)
@@ -111,19 +111,26 @@ def _score_against_reference(
     if real_image_dir is None:
         return float(
             cleanfid.compute_fid(
-                str(gen_dir), dataset_name="cifar10", dataset_res=image_size,
-                dataset_split="train", mode="clean",
+                str(gen_dir),
+                dataset_name="cifar10",
+                dataset_res=image_size,
+                dataset_split="train",
+                mode="clean",
             )
         )
     if not cleanfid.test_stats_exists(_IMAGENET64_VAL_STATS_NAME, "clean"):
         cleanfid.make_custom_stats(
-            _IMAGENET64_VAL_STATS_NAME, str(real_image_dir),
-            num=num_real_samples, mode="clean",
+            _IMAGENET64_VAL_STATS_NAME,
+            str(real_image_dir),
+            num=num_real_samples,
+            mode="clean",
         )
     return float(
         cleanfid.compute_fid(
-            str(gen_dir), dataset_name=_IMAGENET64_VAL_STATS_NAME,
-            dataset_split="custom", mode="clean",
+            str(gen_dir),
+            dataset_name=_IMAGENET64_VAL_STATS_NAME,
+            dataset_split="custom",
+            mode="clean",
         )
     )
 
@@ -165,26 +172,24 @@ def compute_fid(
     """
     distributed = world_size > 1
     if distributed and image_dir is None:
-        raise ValueError(
-            "image_dir (shared) is required when world_size > 1."
-        )
+        raise ValueError("image_dir (shared) is required when world_size > 1.")
 
     all_ids = (
         _class_balanced_ids(num_samples, num_classes, device)
         if gen_class_ids is None
         else gen_class_ids
     )
-    my_ids = (
-        _shard_for_rank(all_ids, rank=rank, world_size=world_size)
-        if distributed
-        else all_ids
-    )
+    my_ids = _shard_for_rank(all_ids, rank=rank, world_size=world_size) if distributed else all_ids
 
     def _run(path: Path) -> float:
         if my_ids.numel() > 0:
             _dump_samples(
-                model, class_ids=my_ids, batch_size=batch_size,
-                device=device, image_dir=path, image_size=image_size,
+                model,
+                class_ids=my_ids,
+                batch_size=batch_size,
+                device=device,
+                image_dir=path,
+                image_size=image_size,
                 prefix=f"gen_r{rank}_" if distributed else "gen_",
             )
         if distributed:
@@ -192,8 +197,10 @@ def compute_fid(
             if rank != 0:
                 return float("nan")
         return _score_against_reference(
-            path, real_image_dir=real_image_dir,
-            num_real_samples=num_real_samples, image_size=image_size,
+            path,
+            real_image_dir=real_image_dir,
+            num_real_samples=num_real_samples,
+            image_size=image_size,
         )
 
     if distributed:

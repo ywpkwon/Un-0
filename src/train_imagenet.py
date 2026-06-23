@@ -98,9 +98,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--batch-size", type=int, default=2048)
     parser.add_argument("--lr", type=float, default=1e-3)
-    parser.add_argument(
-        "--precision", choices=("fp32", "tf32", "bf16", "fp16"), default="bf16"
-    )
+    parser.add_argument("--precision", choices=("fp32", "tf32", "bf16", "fp16"), default="bf16")
     parser.add_argument("--dino-weight", type=float, default=1.0)
     parser.add_argument("--pixel-weight", type=float, default=0.1)
     parser.add_argument("--queue-size", type=int, default=128)
@@ -143,9 +141,7 @@ def _read_val_labels(val_root: str, *, num_labels: int, seed: int = 0) -> Tensor
     """
     folder = ImageFolder(val_root, loader=lambda _p: None)
     idx_to_class_id = {idx: int(name) for name, idx in folder.class_to_idx.items()}
-    all_labels = torch.tensor(
-        [idx_to_class_id[t] for t in folder.targets], dtype=torch.long
-    )
+    all_labels = torch.tensor([idx_to_class_id[t] for t in folder.targets], dtype=torch.long)
     generator = torch.Generator().manual_seed(int(seed))
     order = torch.randperm(all_labels.numel(), generator=generator)
     n = min(num_labels, all_labels.numel())
@@ -200,9 +196,7 @@ def train(args: argparse.Namespace) -> None:
         global_step = int(resume_state.get("global_step", 0))
 
     model: nn.Module = (
-        DistributedDataParallel(raw_model, device_ids=[local_rank])
-        if distributed
-        else raw_model
+        DistributedDataParallel(raw_model, device_ids=[local_rank]) if distributed else raw_model
     )
 
     optimizer = DecoupledAdamW(
@@ -215,7 +209,9 @@ def train(args: argparse.Namespace) -> None:
     schedule_epochs = int(args.lr_schedule_epochs or args.epochs)
     total_steps = schedule_epochs * steps_per_epoch
     scheduler = make_scheduler(
-        optimizer, total_steps=total_steps, warmup_fraction=WARMUP_FRACTION,
+        optimizer,
+        total_steps=total_steps,
+        warmup_fraction=WARMUP_FRACTION,
     )
 
     if resume_state is not None:
@@ -262,7 +258,9 @@ def train(args: argparse.Namespace) -> None:
     fid_all_class_ids: Tensor | None = None
     if args.fid_every_epochs > 0:
         fid_all_class_ids = _read_val_labels(
-            args.val_root, num_labels=FID_NUM_GEN_SAMPLES, seed=int(args.seed),
+            args.val_root,
+            num_labels=FID_NUM_GEN_SAMPLES,
+            seed=int(args.seed),
         )
 
     queue_size = int(args.queue_size)
@@ -315,9 +313,7 @@ def train(args: argparse.Namespace) -> None:
                 ready_gen = gen_classes[queue.ready_mask(num_pos)[gen_classes]]
                 ready_local = ready_gen.numel() > 0
                 if distributed:
-                    ready_t = torch.tensor(
-                        int(ready_local), device=device, dtype=torch.int32
-                    )
+                    ready_t = torch.tensor(int(ready_local), device=device, dtype=torch.int32)
                     dist.all_reduce(ready_t, op=dist.ReduceOp.MIN)
                     queue_ready = bool(ready_t)
                 else:
@@ -348,7 +344,9 @@ def train(args: argparse.Namespace) -> None:
                     loss = (x_gen * 0.0).sum()
                     metrics = {"loss/total": loss.detach()}
                 metrics["queue_ready"] = torch.as_tensor(
-                    float(queue_ready), device=device, dtype=x_gen.dtype,
+                    float(queue_ready),
+                    device=device,
+                    dtype=x_gen.dtype,
                 )
 
             loss.backward()
@@ -358,9 +356,7 @@ def train(args: argparse.Namespace) -> None:
             global_step += 1
 
             if is_main and global_step % LOG_EVERY == 0:
-                log_metrics = {
-                    name: float(value.detach().cpu()) for name, value in metrics.items()
-                }
+                log_metrics = {name: float(value.detach().cpu()) for name, value in metrics.items()}
                 log_metrics["lr"] = float(scheduler.get_last_lr()[0])
                 log_metrics["grad_norm"] = float(grad_norm.detach().cpu())
                 progress.set_postfix(log_metrics)
@@ -368,18 +364,14 @@ def train(args: argparse.Namespace) -> None:
                     wandb_run.log(log_metrics, step=global_step)
 
         epoch_num = epoch + 1
-        fid_firing = (
-            args.fid_every_epochs > 0 and epoch_num % args.fid_every_epochs == 0
-        )
+        fid_firing = args.fid_every_epochs > 0 and epoch_num % args.fid_every_epochs == 0
         should_sample = epoch_num % SAMPLE_EVERY == 0 or fid_firing
         if is_main and should_sample:
             samples = raw_model.sample(grid_class_ids)
             sample_path = checkpoint_dir / "samples" / f"epoch_{epoch_num:04d}.png"
             save_sample_grid(samples, sample_path, image_size=IMAGE_SIZE)
             if wandb_run is not None:
-                wandb_run.log(
-                    {"samples": wandb.Image(str(sample_path))}, step=global_step
-                )
+                wandb_run.log({"samples": wandb.Image(str(sample_path))}, step=global_step)
         # Proxy FID. Under DDP, generation is sharded across ranks into one
         # shared dir (rank-unique filenames); rank 0 scores the combined samples
         # while the others get nan. All ranks must call compute_fid so the
@@ -391,9 +383,7 @@ def train(args: argparse.Namespace) -> None:
             # removed after scoring so 10k PNGs/event don't accumulate over the
             # run. Single-process falls back to compute_fid's tempdir.
             fid_dir = (
-                checkpoint_dir / "fid_samples" / f"epoch_{epoch_num:04d}"
-                if distributed
-                else None
+                checkpoint_dir / "fid_samples" / f"epoch_{epoch_num:04d}" if distributed else None
             )
             raw_model.eval()
             fid_value = compute_fid(

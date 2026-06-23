@@ -48,10 +48,7 @@ def disable_cudnn_sdp_on_blackwell() -> None:
     SDPA backend dispatches to flash instead. Gated on compute capability so
     pre-Blackwell GPUs (H200, A100) keep cuDNN attention.
     """
-    if (
-        torch.cuda.is_available()
-        and torch.cuda.get_device_capability()[0] >= _BLACKWELL_SM_MAJOR
-    ):
+    if torch.cuda.is_available() and torch.cuda.get_device_capability()[0] >= _BLACKWELL_SM_MAJOR:
         torch.backends.cuda.enable_cudnn_sdp(False)  # noqa: FBT003
 
 
@@ -65,11 +62,7 @@ def save_sample_grid(
     """Save flattened `[-1, 1]` generated samples as an image grid."""
     output_path = Path(path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    images = (
-        samples.detach()
-        .cpu()
-        .reshape(samples.shape[0], 3, image_size, image_size)
-    )
+    images = samples.detach().cpu().reshape(samples.shape[0], 3, image_size, image_size)
     save_image(((images + 1.0) * 0.5).clamp(0.0, 1.0), output_path, nrow=nrow)
 
 
@@ -90,9 +83,7 @@ def linear_warmup_decay_multiplier(
     return max(0.0, 1.0 - progress)
 
 
-def autocast_context(
-    device: torch.device, precision: Precision
-) -> AbstractContextManager:
+def autocast_context(device: torch.device, precision: Precision) -> AbstractContextManager:
     """Return the autocast context for the requested precision."""
     enabled = precision in ("bf16", "fp16")
     dtype = torch.bfloat16 if precision == "bf16" else torch.float16

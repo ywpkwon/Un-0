@@ -14,7 +14,10 @@ from losses import (
 
 
 def _seeded_pair(
-    n: int, d: int, *, seed: int,
+    n: int,
+    d: int,
+    *,
+    seed: int,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     gen_rng = torch.Generator().manual_seed(seed)
     x_real = torch.randn(n, d, generator=gen_rng)
@@ -73,8 +76,10 @@ def test_conditional_drift_loss_pixel_only() -> None:
     class_id_gen = torch.tensor([0, 0, 0, 0, 1, 1, 1, 1])
 
     loss, metrics = conditional_drift_loss(
-        x_real, x_gen,
-        class_id_real, class_id_gen,
+        x_real,
+        x_gen,
+        class_id_real,
+        class_id_gen,
         dino=None,
         dino_weight=0.0,
         pixel_weight=0.1,
@@ -95,14 +100,16 @@ def test_queue_mode_matches_legacy_when_positives_equal_batch() -> None:
     torch.manual_seed(0)
     legacy = conditional_drift_loss_for_views(
         [(x_real, x_gen)],
-        class_id, class_id,
+        class_id,
+        class_id,
         temperatures=(0.1, 0.2),
         gamma=0.2,
     )
     torch.manual_seed(0)
     queue_mode = conditional_drift_loss_for_views(
         [(x_real, x_gen)],
-        class_id, class_id,
+        class_id,
+        class_id,
         gamma_views=[x_real],
         class_id_gamma=class_id,
         temperatures=(0.1, 0.2),
@@ -122,8 +129,10 @@ def test_queue_mode_with_separate_positives_backprops() -> None:
     class_id_gen = class_id_real
 
     loss, metrics = conditional_drift_loss(
-        x_real_batch, x_gen,
-        class_id_real, class_id_gen,
+        x_real_batch,
+        x_gen,
+        class_id_real,
+        class_id_gen,
         dino=None,
         dino_weight=0.0,
         pixel_weight=1.0,
@@ -163,7 +172,9 @@ def test_cifar10_precomputed_skips_live_dino_on_reals() -> None:
     extract_calls: list[int] = []
 
     def fake_extract(
-        _extractor: object, x_flat: torch.Tensor, **_: object,
+        _extractor: object,
+        x_flat: torch.Tensor,
+        **_: object,
     ) -> list[torch.Tensor]:
         extract_calls.append(int(x_flat.shape[0]))
         base = x_flat[:, :feat_dim]
@@ -197,15 +208,19 @@ def test_precomputed_with_queue_runs_dino_only_on_gens() -> None:
     class_id_real = torch.tensor([0, 0, 1, 1])
     class_id_pos = torch.tensor([0, 0, 1, 1])
     precomputed_pos = gather_precomputed_dino_views(
-        bank, torch.tensor([0, 1, 2, 3]),
+        bank,
+        torch.tensor([0, 1, 2, 3]),
     )
     precomputed_gamma = gather_precomputed_dino_views(
-        bank, torch.tensor([4, 5, 6, 7]),
+        bank,
+        torch.tensor([4, 5, 6, 7]),
     )
     extract_calls: list[int] = []
 
     def fake_extract(
-        _extractor: object, x_flat: torch.Tensor, **_: object,
+        _extractor: object,
+        x_flat: torch.Tensor,
+        **_: object,
     ) -> list[torch.Tensor]:
         extract_calls.append(int(x_flat.shape[0]))
         base = x_flat[:, :feat_dim]
@@ -260,7 +275,8 @@ def test_drift_returns_graph_connected_zero_when_no_class_has_positives() -> Non
 
     loss = conditional_drift_loss_for_views(
         [(x_real, x_gen)],
-        class_id_pos, class_id_gen,
+        class_id_pos,
+        class_id_gen,
         temperatures=(0.1,),
         gamma=0.0,
     )
@@ -310,14 +326,19 @@ def test_dino_antialias_false_when_constructed_for_imagenet() -> None:
 
 def test_compiled_drift_matches_eager() -> None:
     """Compiling the drift core must not change the loss (numerical equivalence)."""
+
     def _loss(*, compile_drift: bool) -> torch.Tensor:
         torch.manual_seed(0)
         x_real = torch.randn(12, 8)
         x_gen = torch.randn(12, 8, requires_grad=True)
         cls = torch.tensor([0, 0, 0, 1, 1, 1, 2, 2, 2, 0, 1, 2])
         return conditional_drift_loss_for_views(
-            [(x_real, x_gen)], cls, cls,
-            temperatures=(0.05, 0.2), gamma=0.2, compile_drift=compile_drift,
+            [(x_real, x_gen)],
+            cls,
+            cls,
+            temperatures=(0.05, 0.2),
+            gamma=0.2,
+            compile_drift=compile_drift,
         )
 
     eager = _loss(compile_drift=False)
@@ -336,8 +357,15 @@ def test_conditional_drift_loss_golden_value_unchanged() -> None:
     dino = MagicMock(side_effect=lambda x, image_size=32: x @ proj)
 
     total, _ = conditional_drift_loss(
-        x_real, x_gen, cls, cls, dino=dino,
-        dino_weight=0.911, pixel_weight=0.114, gamma=0.2, image_size=32,
+        x_real,
+        x_gen,
+        cls,
+        cls,
+        dino=dino,
+        dino_weight=0.911,
+        pixel_weight=0.114,
+        gamma=0.2,
+        image_size=32,
     )
     # rel tolerance, not abs=1e-9: CPU reduction order varies run-to-run, so the
     # value wobbles at ~1e-7. A real regression moves it by percent-level.

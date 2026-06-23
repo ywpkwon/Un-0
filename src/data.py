@@ -38,7 +38,8 @@ def collate_image_batch(batch: list[dict[str, Any]]) -> dict[str, Tensor]:
     out: dict[str, Tensor] = {"data": data, "class_id": labels}
     if batch and "sample_id" in batch[0]:
         out["sample_id"] = torch.as_tensor(
-            [int(item["sample_id"]) for item in batch], dtype=torch.long,
+            [int(item["sample_id"]) for item in batch],
+            dtype=torch.long,
         )
     return out
 

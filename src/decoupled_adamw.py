@@ -50,13 +50,16 @@ class DecoupledAdamW(AdamW):
         initial_lrs = [group["initial_lr"] for group in self.param_groups]
         super().load_state_dict(state_dict)
         for group, initial_lr in zip(
-            self.param_groups, initial_lrs, strict=True,
+            self.param_groups,
+            initial_lrs,
+            strict=True,
         ):
             group.setdefault("initial_lr", initial_lr)
 
     @torch.no_grad()
     def step(  # type: ignore[override]
-        self, closure: Callable[[], float] | None = None,
+        self,
+        closure: Callable[[], float] | None = None,
     ) -> float | None:
         """Perform a single optimization step."""
         loss = None
@@ -88,21 +91,23 @@ class DecoupledAdamW(AdamW):
                 state = self.state[p]
                 if "step" not in state:
                     state["step"] = torch.zeros(
-                        (), dtype=torch.float, device=p.device,
+                        (),
+                        dtype=torch.float,
+                        device=p.device,
                     )
                     state["exp_avg"] = torch.zeros_like(
-                        p, memory_format=torch.preserve_format,
+                        p,
+                        memory_format=torch.preserve_format,
                     )
                     state["exp_avg_sq"] = torch.zeros_like(
-                        p, memory_format=torch.preserve_format,
+                        p,
+                        memory_format=torch.preserve_format,
                     )
                 state["step"] += 1
                 step_count = float(state["step"].item())
 
                 if weight_decay != 0:
-                    decay_factor = (
-                        (lr / initial_lr) if initial_lr else 1.0
-                    )
+                    decay_factor = (lr / initial_lr) if initial_lr else 1.0
                     p.mul_(1.0 - decay_factor * weight_decay)
 
                 exp_avg = state["exp_avg"]
@@ -112,9 +117,7 @@ class DecoupledAdamW(AdamW):
 
                 bias_correction1 = 1.0 - beta1**step_count
                 bias_correction2 = 1.0 - beta2**step_count
-                denom = (
-                    exp_avg_sq.sqrt() / math.sqrt(bias_correction2)
-                ).add_(eps)
+                denom = (exp_avg_sq.sqrt() / math.sqrt(bias_correction2)).add_(eps)
                 step_size = lr / bias_correction1
                 p.addcdiv_(exp_avg, denom, value=-step_size)
 

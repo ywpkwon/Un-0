@@ -43,9 +43,13 @@ def test_conditional_generator_produces_flat_images_and_gradients() -> None:
     )
     readout = ReadoutTransform(encoding="sin_cos", relativization="ref_oscillator")
     decoder = ResizeConvDecoder(
-        feature_dim=8, output_dim=16,
-        in_channels=2, in_height=2, in_width=2,
-        out_channels=1, num_upsamples=1,
+        feature_dim=8,
+        output_dim=16,
+        in_channels=2,
+        in_height=2,
+        in_width=2,
+        out_channels=1,
+        num_upsamples=1,
     )
     model = ConditionalImplicitKuramotoGenerator(
         dynamics=dynamics,
@@ -73,13 +77,20 @@ def test_class_dropout_zeroes_drive_for_dropped_samples() -> None:
     )
     readout = ReadoutTransform(encoding="sin_cos", relativization="ref_oscillator")
     decoder = ResizeConvDecoder(
-        feature_dim=8, output_dim=16,
-        in_channels=2, in_height=2, in_width=2,
-        out_channels=1, num_upsamples=1,
+        feature_dim=8,
+        output_dim=16,
+        in_channels=2,
+        in_height=2,
+        in_width=2,
+        out_channels=1,
+        num_upsamples=1,
     )
     model = ConditionalImplicitKuramotoGenerator(
-        dynamics=dynamics, readout=readout, decoder=decoder,
-        class_dropout_prob=1.0, num_steps=2,
+        dynamics=dynamics,
+        readout=readout,
+        decoder=decoder,
+        class_dropout_prob=1.0,
+        num_steps=2,
     )
     model.train()
 
@@ -164,9 +175,13 @@ def _tiny_generator(*, num_steps: int, solver: str = "rk4"):
     )
     readout = ReadoutTransform(encoding="sin_cos", relativization="ref_oscillator")
     decoder = ResizeConvDecoder(
-        feature_dim=8, output_dim=16,
-        in_channels=2, in_height=2, in_width=2,
-        out_channels=1, num_upsamples=1,
+        feature_dim=8,
+        output_dim=16,
+        in_channels=2,
+        in_height=2,
+        in_width=2,
+        out_channels=1,
+        num_upsamples=1,
     )
     model = ConditionalImplicitKuramotoGenerator(
         dynamics=dynamics,
@@ -218,16 +233,25 @@ def test_frozen_dynamics_reservoir_gets_no_gradient() -> None:
 def test_generator_defaults_to_rk4_integration() -> None:
     """The generator preserves rk4 as the default solver."""
     dynamics = ConditionalKuramotoDynamics(
-        n_oscillators=4, n_conditional_oscillators=2, num_classes=3,
+        n_oscillators=4,
+        n_conditional_oscillators=2,
+        num_classes=3,
     )
     readout = ReadoutTransform(encoding="sin_cos", relativization="ref_oscillator")
     decoder = ResizeConvDecoder(
-        feature_dim=8, output_dim=16,
-        in_channels=2, in_height=2, in_width=2,
-        out_channels=1, num_upsamples=1,
+        feature_dim=8,
+        output_dim=16,
+        in_channels=2,
+        in_height=2,
+        in_width=2,
+        out_channels=1,
+        num_upsamples=1,
     )
     model = ConditionalImplicitKuramotoGenerator(
-        dynamics=dynamics, readout=readout, decoder=decoder, num_steps=2,
+        dynamics=dynamics,
+        readout=readout,
+        decoder=decoder,
+        num_steps=2,
     )
     assert model.solver == "rk4"
 
@@ -235,17 +259,26 @@ def test_generator_defaults_to_rk4_integration() -> None:
 def test_generator_euler_integration_runs_and_backprops() -> None:
     """Euler integration (the ImageNet-64 setting) produces images and gradients."""
     dynamics = ConditionalKuramotoDynamics(
-        n_oscillators=4, n_conditional_oscillators=1, num_classes=3,
+        n_oscillators=4,
+        n_conditional_oscillators=1,
+        num_classes=3,
     )
     readout = ReadoutTransform(encoding="sin_cos", relativization="ref_oscillator")
     decoder = ResizeConvDecoder(
-        feature_dim=8, output_dim=16,
-        in_channels=2, in_height=2, in_width=2,
-        out_channels=1, num_upsamples=1,
+        feature_dim=8,
+        output_dim=16,
+        in_channels=2,
+        in_height=2,
+        in_width=2,
+        out_channels=1,
+        num_upsamples=1,
     )
     model = ConditionalImplicitKuramotoGenerator(
-        dynamics=dynamics, readout=readout, decoder=decoder,
-        num_steps=10, solver="euler",
+        dynamics=dynamics,
+        readout=readout,
+        decoder=decoder,
+        num_steps=10,
+        solver="euler",
     )
     class_id = torch.tensor([0, 1, 2])
     samples = model(class_id)
@@ -272,22 +305,24 @@ def test_build_imagenet64_model_defaults() -> None:
 def test_build_imagenet64_model_uses_unit_output_gain() -> None:
     """ImageNet-64 decoder uses init_output_gain=1.0 (reference), not 0.5."""
     cifar = build_cifar10_model(
-        n_oscillators=16, n_conditional_oscillators=1, num_steps=2,
+        n_oscillators=16,
+        n_conditional_oscillators=1,
+        num_steps=2,
     )
     imagenet = build_imagenet64_model(
-        n_oscillators=16, n_conditional_oscillators=1,
+        n_oscillators=16,
+        n_conditional_oscillators=1,
     )
-    ratio = (
-        imagenet.decoder.to_output.weight.std()
-        / cifar.decoder.to_output.weight.std()
-    ).item()
+    ratio = (imagenet.decoder.to_output.weight.std() / cifar.decoder.to_output.weight.std()).item()
     assert ratio == pytest.approx(2.0, rel=0.15)
 
 
 def test_prepare_class_ids_for_generation_picks_exactly_num_classes_per_step() -> None:
     """Generation labels cover exactly `num_classes_per_step` distinct classes."""
     ids = prepare_class_ids_for_generation(
-        num_samples=2048, num_classes_per_step=64, num_total_classes=1000,
+        num_samples=2048,
+        num_classes_per_step=64,
+        num_total_classes=1000,
     )
     assert ids.shape == (2048,)
     assert torch.unique(ids).numel() == 64
@@ -298,7 +333,9 @@ def test_prepare_class_ids_for_generation_picks_exactly_num_classes_per_step() -
 def test_prepare_class_ids_for_generation_balances_with_round_robin_remainder() -> None:
     """Each class gets base count; the first `remainder` classes get one extra."""
     ids = prepare_class_ids_for_generation(
-        num_samples=10, num_classes_per_step=4, num_total_classes=50,
+        num_samples=10,
+        num_classes_per_step=4,
+        num_total_classes=50,
     )
     assert ids.shape == (10,)
     counts = sorted(torch.bincount(ids).tolist(), reverse=True)
@@ -310,10 +347,16 @@ def test_prepare_class_ids_for_generation_is_deterministic_with_generator() -> N
     g1 = torch.Generator().manual_seed(123)
     g2 = torch.Generator().manual_seed(123)
     ids1 = prepare_class_ids_for_generation(
-        num_samples=128, num_classes_per_step=8, num_total_classes=1000, generator=g1,
+        num_samples=128,
+        num_classes_per_step=8,
+        num_total_classes=1000,
+        generator=g1,
     )
     ids2 = prepare_class_ids_for_generation(
-        num_samples=128, num_classes_per_step=8, num_total_classes=1000, generator=g2,
+        num_samples=128,
+        num_classes_per_step=8,
+        num_total_classes=1000,
+        generator=g2,
     )
     assert torch.equal(ids1, ids2)
 
@@ -333,7 +376,9 @@ def test_build_cifar10_model_param_fingerprint_unchanged(monkeypatch) -> None:
     monkeypatch.setattr(torch, "compile", lambda m, *a, **k: m)
     torch.manual_seed(0)
     model = build_cifar10_model(
-        n_oscillators=16, n_conditional_oscillators=2, num_steps=2,
+        n_oscillators=16,
+        n_conditional_oscillators=2,
+        num_steps=2,
     )
     assert _fingerprint(model.state_dict()) == (
         "532639f04f2480b1bea9316682f9b6dc8220a27173a1864fc0b9bd3b079b9bf5"

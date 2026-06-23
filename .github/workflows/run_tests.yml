@@ -6,6 +6,28 @@ on:
   pull_request:
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.2.0
+        with:
+          enable-cache: true
+          python-version: "3.13"
+
+      # ruff lives in the dev group; --no-install-project skips the heavy
+      # CUDA torch wheel so linting stays fast and independent of the test job.
+      - name: Install ruff
+        run: uv sync --only-group dev --no-install-project
+
+      - name: Ruff format check
+        run: uv run ruff format --check
+
+      - name: Ruff lint
+        run: uv run ruff check
+
   tests:
     runs-on: ubuntu-latest
     steps:

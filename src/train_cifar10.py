@@ -59,9 +59,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--epochs", type=int, default=1200)
     parser.add_argument("--batch-size", type=int, default=2048)
     parser.add_argument("--lr", type=float, default=0.0013894955)
-    parser.add_argument(
-        "--precision", choices=("fp32", "tf32", "bf16", "fp16"), default="bf16"
-    )
+    parser.add_argument("--precision", choices=("fp32", "tf32", "bf16", "fp16"), default="bf16")
     parser.add_argument("--dino-weight", type=float, default=1.0)
     parser.add_argument("--pixel-weight", type=float, default=0.004)
     parser.add_argument(
@@ -182,11 +180,15 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
-        "--fid-num-samples", type=int, default=50000,
+        "--fid-num-samples",
+        type=int,
+        default=50000,
         help="Class-balanced sample count for periodic FID.",
     )
     parser.add_argument(
-        "--fid-batch-size", type=int, default=256,
+        "--fid-batch-size",
+        type=int,
+        default=256,
         help="Batch size for periodic FID sample generation.",
     )
     return parser
@@ -209,9 +211,7 @@ def build_optimizer(
 
 def _eval_class_ids(device: torch.device) -> Tensor:
     """Class labels for the fixed eval grid: NUM_SAMPLES_PER_CLASS of each class."""
-    return torch.arange(NUM_CLASSES, device=device).repeat_interleave(
-        NUM_SAMPLES_PER_CLASS
-    )
+    return torch.arange(NUM_CLASSES, device=device).repeat_interleave(NUM_SAMPLES_PER_CLASS)
 
 
 def train(args: argparse.Namespace) -> None:
@@ -310,9 +310,7 @@ def train(args: argparse.Namespace) -> None:
         global_step = int(resume_state.get("global_step", 0))
 
     model: nn.Module = (
-        DistributedDataParallel(raw_model, device_ids=[local_rank])
-        if distributed
-        else raw_model
+        DistributedDataParallel(raw_model, device_ids=[local_rank]) if distributed else raw_model
     )
 
     optimizer, lr_group_names = build_optimizer(
@@ -404,9 +402,7 @@ def train(args: argparse.Namespace) -> None:
     if args.fid_every_epochs > 0:
         from metrics import _class_balanced_ids
 
-        fid_all_class_ids = _class_balanced_ids(
-            int(args.fid_num_samples), NUM_CLASSES, device
-        )
+        fid_all_class_ids = _class_balanced_ids(int(args.fid_num_samples), NUM_CLASSES, device)
         if distributed:
             dist.broadcast(fid_all_class_ids, src=0)
 
@@ -428,12 +424,11 @@ def train(args: argparse.Namespace) -> None:
         for _step, batch in progress:
             x_real = batch["data"].to(device=device, non_blocking=True)
             class_id_real = batch["class_id"].to(
-                device=device, non_blocking=True,
+                device=device,
+                non_blocking=True,
             )
             sample_id_real = (
-                batch["sample_id"].to(device=device, non_blocking=True)
-                if use_precomputed
-                else None
+                batch["sample_id"].to(device=device, non_blocking=True) if use_precomputed else None
             )
             # Gens use the same class labels as the real batch so per-class
             # positives/negatives are aligned in the conditional drift loss.
@@ -446,22 +441,19 @@ def train(args: argparse.Namespace) -> None:
             if use_queue:
                 queue.push(x_real.detach(), class_id_real, sample_id_real)
                 gen_classes = torch.unique(class_id_gen)
-                ready_local = bool(
-                    queue.ready_mask(num_pos)[gen_classes].all()
-                )
+                ready_local = bool(queue.ready_mask(num_pos)[gen_classes].all())
                 # All ranks agree on readiness so no rank starts training
                 # against queue draws while another is still warming up.
                 if distributed:
-                    ready_t = torch.tensor(
-                        int(ready_local), device=device, dtype=torch.int32
-                    )
+                    ready_t = torch.tensor(int(ready_local), device=device, dtype=torch.int32)
                     dist.all_reduce(ready_t, op=dist.ReduceOp.MIN)
                     queue_ready = bool(ready_t)
                 else:
                     queue_ready = ready_local
                 if queue_ready:
                     x_real_pos, class_id_pos, sample_id_pos = queue.draw(
-                        gen_classes, num_pos=num_pos,
+                        gen_classes,
+                        num_pos=num_pos,
                     )
 
             optimizer.zero_grad(set_to_none=True)
@@ -473,18 +465,16 @@ def train(args: argparse.Namespace) -> None:
                     if use_precomputed and float(args.dino_weight) != 0.0:
                         # Pos views come from the queue's sample_ids when in
                         # queue mode, otherwise from the current batch.
-                        pos_sid = (
-                            sample_id_pos
-                            if sample_id_pos is not None
-                            else sample_id_real
-                        )
+                        pos_sid = sample_id_pos if sample_id_pos is not None else sample_id_real
                         precomputed_pos = gather_precomputed_dino_views(
-                            dino_real_bank, pos_sid,
+                            dino_real_bank,
+                            pos_sid,
                         )
                         if use_queue:
                             # γ-mix views always come from the current batch.
                             precomputed_gamma = gather_precomputed_dino_views(
-                                dino_real_bank, sample_id_real,
+                                dino_real_bank,
+                                sample_id_real,
                             )
                     loss, metrics = conditional_drift_loss(
                         x_real,
@@ -507,33 +497,30 @@ def train(args: argparse.Namespace) -> None:
                     loss = (x_gen * 0.0).sum()
                     metrics = {"loss/total": loss.detach()}
                 metrics["queue_ready"] = torch.as_tensor(
-                    float(queue_ready), device=device, dtype=x_gen.dtype,
+                    float(queue_ready),
+                    device=device,
+                    dtype=x_gen.dtype,
                 )
 
             if scaler is not None:
                 scaler.scale(loss).backward()
                 scaler.unscale_(optimizer)
-                grad_norm = nn.utils.clip_grad_norm_(
-                    model.parameters(), GRAD_CLIP_NORM
-                )
+                grad_norm = nn.utils.clip_grad_norm_(model.parameters(), GRAD_CLIP_NORM)
                 scaler.step(optimizer)
                 scaler.update()
             else:
                 loss.backward()
-                grad_norm = nn.utils.clip_grad_norm_(
-                    model.parameters(), GRAD_CLIP_NORM
-                )
+                grad_norm = nn.utils.clip_grad_norm_(model.parameters(), GRAD_CLIP_NORM)
                 optimizer.step()
             scheduler.step()
             global_step += 1
 
             if is_main and global_step % LOG_EVERY == 0:
-                log_metrics = {
-                    name: float(value.detach().cpu())
-                    for name, value in metrics.items()
-                }
+                log_metrics = {name: float(value.detach().cpu()) for name, value in metrics.items()}
                 for name, value in zip(
-                    lr_group_names, scheduler.get_last_lr(), strict=True,
+                    lr_group_names,
+                    scheduler.get_last_lr(),
+                    strict=True,
                 ):
                     log_metrics[name] = float(value)
                 log_metrics["grad_norm"] = float(grad_norm.detach().cpu())
@@ -542,13 +529,9 @@ def train(args: argparse.Namespace) -> None:
                     wandb_run.log(log_metrics, step=global_step)
 
         epoch_num = epoch + 1
-        fid_firing = (
-            args.fid_every_epochs > 0 and epoch_num % args.fid_every_epochs == 0
-        )
+        fid_firing = args.fid_every_epochs > 0 and epoch_num % args.fid_every_epochs == 0
         should_sample = (
-            epoch_num in EARLY_SAMPLE_EPOCHS
-            or epoch_num % SAMPLE_EVERY == 0
-            or fid_firing
+            epoch_num in EARLY_SAMPLE_EPOCHS or epoch_num % SAMPLE_EVERY == 0 or fid_firing
         )
         if is_main and should_sample:
             samples = raw_model.sample(eval_class_ids)
@@ -567,9 +550,7 @@ def train(args: argparse.Namespace) -> None:
             from metrics import compute_fid
 
             fid_dir = (
-                checkpoint_dir / "fid_samples" / f"epoch_{epoch_num:04d}"
-                if distributed
-                else None
+                checkpoint_dir / "fid_samples" / f"epoch_{epoch_num:04d}" if distributed else None
             )
             raw_model.eval()
             fid_value = compute_fid(
@@ -601,9 +582,7 @@ def train(args: argparse.Namespace) -> None:
             dist.barrier()
 
     if is_main:
-        torch.save(
-            get_train_state(int(args.epochs) - 1), checkpoint_dir / "final.pt"
-        )
+        torch.save(get_train_state(int(args.epochs) - 1), checkpoint_dir / "final.pt")
     if is_main and wandb_run is not None:
         wandb_run.finish()
     if distributed:

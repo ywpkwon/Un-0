@@ -41,7 +41,10 @@ def test_compute_fid_cifar_path_uses_named_stats_and_balanced_ids() -> None:
     ):
         torch.manual_seed(0)
         value = compute_fid(
-            model, num_samples=100, num_classes=10, batch_size=64,
+            model,
+            num_samples=100,
+            num_classes=10,
+            batch_size=64,
             device=torch.device("cpu"),
         )
 
@@ -72,9 +75,15 @@ def test_compute_fid_imagenet_path_builds_custom_stats_and_uses_given_ids() -> N
         patch("metrics._dump_samples") as dump,
     ):
         value = compute_fid(
-            model, num_samples=10000, num_classes=1000, batch_size=512,
-            device=torch.device("cpu"), image_size=64,
-            real_image_dir=real_dir, num_real_samples=50000, gen_class_ids=gen_ids,
+            model,
+            num_samples=10000,
+            num_classes=1000,
+            batch_size=512,
+            device=torch.device("cpu"),
+            image_size=64,
+            real_image_dir=real_dir,
+            num_real_samples=50000,
+            gen_class_ids=gen_ids,
         )
 
     assert value == 8.5
@@ -97,9 +106,14 @@ def test_compute_fid_imagenet_reuses_existing_custom_stats() -> None:
         patch("metrics._dump_samples"),
     ):
         compute_fid(
-            model, num_samples=4, num_classes=2, batch_size=2,
-            device=torch.device("cpu"), image_size=64,
-            real_image_dir="/tmp/real", num_real_samples=10,  # noqa: S108
+            model,
+            num_samples=4,
+            num_classes=2,
+            batch_size=2,
+            device=torch.device("cpu"),
+            image_size=64,
+            real_image_dir="/tmp/real",
+            num_real_samples=10,  # noqa: S108
             gen_class_ids=torch.tensor([0, 1, 0, 1]),
         )
 
@@ -116,8 +130,12 @@ def test_dump_samples_uses_explicit_class_ids_in_order(tmp_path) -> None:
 
     with patch("metrics.save_image"):
         _dump_samples(
-            model, class_ids=class_ids, batch_size=2,
-            device=torch.device("cpu"), image_dir=tmp_path, image_size=64,
+            model,
+            class_ids=class_ids,
+            batch_size=2,
+            device=torch.device("cpu"),
+            image_dir=tmp_path,
+            image_size=64,
         )
 
     sampled = torch.cat([c.args[0] for c in model.sample.call_args_list])
@@ -161,11 +179,18 @@ def test_compute_fid_distributed_rank0_scores_others_nan(tmp_path) -> None:
             patch("metrics.dist.barrier") as barrier,
         ):
             value = compute_fid(
-                MagicMock(), num_samples=12, num_classes=4, batch_size=4,
-                device=torch.device("cpu"), image_size=64,
-                real_image_dir=str(tmp_path / "real"), num_real_samples=10,
-                gen_class_ids=gen_ids, image_dir=tmp_path / "shared",
-                rank=rank, world_size=3,
+                MagicMock(),
+                num_samples=12,
+                num_classes=4,
+                batch_size=4,
+                device=torch.device("cpu"),
+                image_size=64,
+                real_image_dir=str(tmp_path / "real"),
+                num_real_samples=10,
+                gen_class_ids=gen_ids,
+                image_dir=tmp_path / "shared",
+                rank=rank,
+                world_size=3,
             )
         return value, dump, barrier
 
@@ -198,7 +223,12 @@ def test_compute_fid_distributed_requires_image_dir() -> None:
     with patch.dict("sys.modules", {"cleanfid": MagicMock(fid=MagicMock())}):
         with pytest.raises(ValueError, match="image_dir"):
             compute_fid(
-                MagicMock(), num_samples=4, num_classes=2, batch_size=2,
-                device=torch.device("cpu"), gen_class_ids=torch.arange(4),
-                rank=0, world_size=2,
+                MagicMock(),
+                num_samples=4,
+                num_classes=2,
+                batch_size=2,
+                device=torch.device("cpu"),
+                gen_class_ids=torch.arange(4),
+                rank=0,
+                world_size=2,
             )

@@ -61,18 +61,19 @@ def test_push_wraps_and_overwrites_oldest_entries() -> None:
 def test_push_handles_multiple_same_class_samples_per_batch() -> None:
     """Same-class samples in one push must land in distinct slots."""
     q = PerClassQueue(num_classes=2, queue_size=10, data_dim=2)
-    x = torch.tensor(
-        [[1.0, 1.0], [2.0, 2.0], [3.0, 3.0], [4.0, 4.0], [5.0, 5.0]]
-    )
+    x = torch.tensor([[1.0, 1.0], [2.0, 2.0], [3.0, 3.0], [4.0, 4.0], [5.0, 5.0]])
     ids = torch.tensor([0, 0, 1, 0, 1])
     q.push(x, ids)
     samples0, _, _ = q.draw(torch.tensor([0]), num_pos=3)
     assert {tuple(r.tolist()) for r in samples0} == {
-        (1.0, 1.0), (2.0, 2.0), (4.0, 4.0),
+        (1.0, 1.0),
+        (2.0, 2.0),
+        (4.0, 4.0),
     }
     samples1, _, _ = q.draw(torch.tensor([1]), num_pos=2)
     assert {tuple(r.tolist()) for r in samples1} == {
-        (3.0, 3.0), (5.0, 5.0),
+        (3.0, 3.0),
+        (5.0, 5.0),
     }
 
 
@@ -137,7 +138,10 @@ def test_draw_empty_class_ids_returns_empty_tensors() -> None:
 def test_tracking_push_requires_sample_ids() -> None:
     """A tracking queue rejects a push that omits sample_ids."""
     q = PerClassQueue(
-        num_classes=2, queue_size=5, data_dim=3, track_sample_ids=True,
+        num_classes=2,
+        queue_size=5,
+        data_dim=3,
+        track_sample_ids=True,
     )
     with pytest.raises(ValueError, match="sample_ids"):
         q.push(torch.zeros(4, 3), torch.zeros(4, dtype=torch.long))
@@ -146,7 +150,10 @@ def test_tracking_push_requires_sample_ids() -> None:
 def test_tracking_push_rejects_mismatched_sample_ids_length() -> None:
     """sample_ids length must equal batch size when tracking."""
     q = PerClassQueue(
-        num_classes=2, queue_size=5, data_dim=3, track_sample_ids=True,
+        num_classes=2,
+        queue_size=5,
+        data_dim=3,
+        track_sample_ids=True,
     )
     with pytest.raises(ValueError, match="sample_ids"):
         q.push(
@@ -159,7 +166,10 @@ def test_tracking_push_rejects_mismatched_sample_ids_length() -> None:
 def test_tracking_draw_returns_sample_ids_aligned_with_samples() -> None:
     """Drawn sample_ids correspond to the same rows as drawn samples."""
     q = PerClassQueue(
-        num_classes=2, queue_size=10, data_dim=1, track_sample_ids=True,
+        num_classes=2,
+        queue_size=10,
+        data_dim=1,
+        track_sample_ids=True,
     )
     x = torch.arange(10, dtype=torch.float32).unsqueeze(1)
     # Encode the row index in both the value (float i) and the id (100 + i)
@@ -173,7 +183,10 @@ def test_tracking_draw_returns_sample_ids_aligned_with_samples() -> None:
 def test_tracking_draw_overwrites_oldest_sample_ids() -> None:
     """Wrapped draws return the sample_ids of the most recent rows."""
     q = PerClassQueue(
-        num_classes=2, queue_size=3, data_dim=2, track_sample_ids=True,
+        num_classes=2,
+        queue_size=3,
+        data_dim=2,
+        track_sample_ids=True,
     )
     cls = torch.zeros(3, dtype=torch.long)
     q.push(torch.zeros(3, 2), cls, torch.tensor([0, 1, 2]))
@@ -185,7 +198,10 @@ def test_tracking_draw_overwrites_oldest_sample_ids() -> None:
 def test_tracking_draw_empty_class_ids_returns_empty_sample_ids() -> None:
     """An empty tracked draw still returns a zero-row sample_ids tensor."""
     q = PerClassQueue(
-        num_classes=2, queue_size=5, data_dim=3, track_sample_ids=True,
+        num_classes=2,
+        queue_size=5,
+        data_dim=3,
+        track_sample_ids=True,
     )
     q.push(
         torch.randn(4, 3),
@@ -202,7 +218,10 @@ def test_queue_on_cuda_matches_input_device() -> None:
     if not torch.cuda.is_available():
         pytest.skip("CUDA not available")
     q = PerClassQueue(
-        num_classes=3, queue_size=10, data_dim=4, device="cuda",
+        num_classes=3,
+        queue_size=10,
+        data_dim=4,
+        device="cuda",
         track_sample_ids=True,
     )
     q.push(
@@ -213,7 +232,8 @@ def test_queue_on_cuda_matches_input_device() -> None:
     mask = q.ready_mask(2)
     assert mask.device.type == "cuda"
     samples, labels, sids = q.draw(
-        torch.tensor([0, 1, 2], device="cuda"), num_pos=2,
+        torch.tensor([0, 1, 2], device="cuda"),
+        num_pos=2,
     )
     assert samples.device.type == "cuda"
     assert labels.device.type == "cuda"

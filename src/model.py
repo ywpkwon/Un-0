@@ -11,16 +11,12 @@ from torch import Tensor, nn
 from torchdiffeq import odeint
 
 Encoding = Literal["raw", "sin", "sin_cos"]
-Relativization = Literal[
-    "absolute", "mean_relative", "ref_oscillator", "pairwise"
-]
+Relativization = Literal["absolute", "mean_relative", "ref_oscillator", "pairwise"]
 Parameterization = Literal["standard", "mup"]
 Solver = Literal["euler", "rk4"]
 
 
-def _kuramoto_velocity(
-    theta: Tensor, omega: Tensor, coupling: Tensor
-) -> Tensor:
+def _kuramoto_velocity(theta: Tensor, omega: Tensor, coupling: Tensor) -> Tensor:
     """Kuramoto phase velocity: dθ/dt = ω + cos(θ) · (sin(θ) @ Kᵀ) − sin(θ) · (cos(θ) @ Kᵀ)."""
     sin_theta = torch.sin(theta)
     cos_theta = torch.cos(theta)
@@ -80,13 +76,11 @@ class ConditionalKuramotoDynamics(nn.Module):
         super().__init__()
         if n_oscillators < 2 or n_conditional_oscillators < 1 or num_classes < 1:
             raise ValueError(
-                "Need n_oscillators >= 2, n_conditional_oscillators >= 1, "
-                "num_classes >= 1."
+                "Need n_oscillators >= 2, n_conditional_oscillators >= 1, num_classes >= 1."
             )
         if parameterization not in ("standard", "mup"):
             raise ValueError(
-                f"parameterization must be 'standard' or 'mup', "
-                f"got {parameterization!r}."
+                f"parameterization must be 'standard' or 'mup', got {parameterization!r}."
             )
 
         self.n = int(n_oscillators)
@@ -110,27 +104,17 @@ class ConditionalKuramotoDynamics(nn.Module):
             k_drive_init_scale = self.n_cond**-0.5
 
         self.omega = nn.Parameter(init_freq_scale * torch.randn(1, self.n))
-        K_init = (
-            init_k_scale * k_init_scale * torch.randn(self.n, self.n)
-        )
+        K_init = init_k_scale * k_init_scale * torch.randn(self.n, self.n)
         K_init.fill_diagonal_(0.0)
         self.K = nn.Parameter(K_init)
 
-        self.omega_cond = nn.Parameter(
-            init_freq_scale * torch.randn(1, self.n_cond)
-        )
-        K_cond_init = (
-            init_k_scale
-            * k_cond_init_scale
-            * torch.randn(self.n_cond, self.n_cond)
-        )
+        self.omega_cond = nn.Parameter(init_freq_scale * torch.randn(1, self.n_cond))
+        K_cond_init = init_k_scale * k_cond_init_scale * torch.randn(self.n_cond, self.n_cond)
         K_cond_init.fill_diagonal_(0.0)
         self.K_cond = nn.Parameter(K_cond_init)
 
         self.K_drive = nn.Parameter(
-            init_k_scale
-            * k_drive_init_scale
-            * torch.randn(self.num_classes, self.n, self.n_cond)
+            init_k_scale * k_drive_init_scale * torch.randn(self.num_classes, self.n, self.n_cond)
         )
 
     @property
@@ -154,9 +138,7 @@ class ConditionalKuramotoDynamics(nn.Module):
         # Subtract the learned diagonal so oscillators don't self-couple.
         # Gradient matches masked_fill: zero on diagonal, full off-diagonal.
         K = (self.K - torch.diag_embed(self.K.diagonal())) * self._K_scale
-        K_cond = (
-            self.K_cond - torch.diag_embed(self.K_cond.diagonal())
-        ) * self._K_cond_scale
+        K_cond = (self.K_cond - torch.diag_embed(self.K_cond.diagonal())) * self._K_cond_scale
 
         main_vel = _kuramoto_velocity(theta_main, self.omega, K)
         cond_vel = _kuramoto_velocity(theta_cond, self.omega_cond, K_cond)
@@ -260,9 +242,7 @@ class ResizeConvDecoder(nn.Module):
         width = in_width * (2**num_upsamples)
         expected_output_dim = out_channels * height * width
         if output_dim != expected_output_dim:
-            raise ValueError(
-                f"output_dim must be {expected_output_dim}, got {output_dim}."
-            )
+            raise ValueError(f"output_dim must be {expected_output_dim}, got {output_dim}.")
         if final_activation not in ("tanh", "none"):
             raise ValueError(f"Invalid final_activation: {final_activation!r}.")
 
@@ -282,9 +262,7 @@ class ResizeConvDecoder(nn.Module):
             current_channels = next_channels
 
         self.cascade = nn.Sequential(*blocks)
-        self.to_output = nn.Conv2d(
-            current_channels, self.out_channels, kernel_size=3, padding=1
-        )
+        self.to_output = nn.Conv2d(current_channels, self.out_channels, kernel_size=3, padding=1)
         self._init_weights(init_output_gain=init_output_gain)
 
     def _init_weights(self, *, init_output_gain: float) -> None:
@@ -292,7 +270,9 @@ class ResizeConvDecoder(nn.Module):
         for module in self.cascade.modules():
             if isinstance(module, nn.Conv2d):
                 nn.init.kaiming_normal_(
-                    module.weight, a=0.2, nonlinearity="leaky_relu",
+                    module.weight,
+                    a=0.2,
+                    nonlinearity="leaky_relu",
                 )
                 nn.init.zeros_(module.bias)
         nn.init.xavier_normal_(
@@ -303,9 +283,7 @@ class ResizeConvDecoder(nn.Module):
 
     def forward(self, features: Tensor) -> Tensor:
         """Decode features shaped `(batch, feature_dim)`."""
-        x = features.reshape(
-            features.shape[0], self.in_channels, self.in_height, self.in_width
-        )
+        x = features.reshape(features.shape[0], self.in_channels, self.in_height, self.in_width)
         x = self.to_output(self.cascade(x))
         if self.final_activation == "tanh":
             x = torch.tanh(x)
@@ -331,9 +309,7 @@ class ConditionalImplicitKuramotoGenerator(nn.Module):
         if num_steps < 0:
             raise ValueError(f"num_steps must be >= 0, got {num_steps}.")
         if not 0.0 <= class_dropout_prob <= 1.0:
-            raise ValueError(
-                f"class_dropout_prob must be in [0, 1], got {class_dropout_prob}."
-            )
+            raise ValueError(f"class_dropout_prob must be in [0, 1], got {class_dropout_prob}.")
         self.dynamics = dynamics
         self.readout = readout
         self.decoder = decoder
@@ -344,8 +320,11 @@ class ConditionalImplicitKuramotoGenerator(nn.Module):
 
     def _time_grid(self, device: torch.device, dtype: torch.dtype) -> Tensor:
         return torch.linspace(
-            0.0, self.integration_time, self.num_steps + 1,
-            device=device, dtype=dtype,
+            0.0,
+            self.integration_time,
+            self.num_steps + 1,
+            device=device,
+            dtype=dtype,
         )
 
     def _sample_initial_state(
@@ -364,15 +343,15 @@ class ConditionalImplicitKuramotoGenerator(nn.Module):
             - torch.pi
         )
 
-    def _class_drive(
-        self, class_id: Tensor, *, generator: torch.Generator | None = None
-    ) -> Tensor:
+    def _class_drive(self, class_id: Tensor, *, generator: torch.Generator | None = None) -> Tensor:
         """Gather per-sample class drive, optionally zeroed by class dropout."""
         drive = self.dynamics.K_drive[class_id]
         if self.training and self.class_dropout_prob > 0.0:
             keep = (
                 torch.rand(
-                    class_id.shape[0], device=class_id.device, generator=generator,
+                    class_id.shape[0],
+                    device=class_id.device,
+                    generator=generator,
                 )
                 >= self.class_dropout_prob
             )
@@ -394,7 +373,10 @@ class ConditionalImplicitKuramotoGenerator(nn.Module):
         param = next(self.parameters())
         batch = int(class_id.shape[0])
         initial_state = self._sample_initial_state(
-            batch, device=param.device, dtype=param.dtype, generator=generator,
+            batch,
+            device=param.device,
+            dtype=param.dtype,
+            generator=generator,
         )
         if self.num_steps == 0:
             final_state = initial_state
@@ -403,7 +385,8 @@ class ConditionalImplicitKuramotoGenerator(nn.Module):
             time_grid = self._time_grid(device=param.device, dtype=param.dtype)
             states = odeint(
                 lambda t, state: self.dynamics(state, t, drive),
-                initial_state, time_grid,
+                initial_state,
+                time_grid,
                 method=self.solver,
                 options={"step_size": self.integration_time / self.num_steps},
             )
@@ -436,8 +419,7 @@ class ConditionalImplicitKuramotoGenerator(nn.Module):
         """Load a released checkpoint by name (e.g. `imagenet64/n16384`)."""
         if name not in _PRETRAINED:
             raise ValueError(
-                f"Unknown pretrained name {name!r}. "
-                f"Available: {', '.join(PRETRAINED_NAMES)}."
+                f"Unknown pretrained name {name!r}. Available: {', '.join(PRETRAINED_NAMES)}."
             )
         from huggingface_hub import hf_hub_download
 
@@ -484,9 +466,7 @@ def prepare_class_ids_for_generation(
     ]
     base = num_samples // num_classes_per_step
     remainder = num_samples % num_classes_per_step
-    counts = torch.full(
-        (num_classes_per_step,), base, device=device, dtype=torch.long
-    )
+    counts = torch.full((num_classes_per_step,), base, device=device, dtype=torch.long)
     counts[:remainder] += 1
     return chosen.repeat_interleave(counts)
 
@@ -621,10 +601,10 @@ _HF_REPO = "un-ai/Un0"
 
 # name -> (filename, family)
 _PRETRAINED: dict[str, tuple[str, str]] = {
-    "cifar10/n1024":     ("cifar10_n1024.pt", "cifar10"),
-    "cifar10/n2048":     ("cifar10_n2048.pt", "cifar10"),
-    "cifar10/n4096":     ("cifar10_n4096.pt", "cifar10"),
-    "imagenet64/n6656":  ("imagenet64_n6656.pt", "imagenet64"),
+    "cifar10/n1024": ("cifar10_n1024.pt", "cifar10"),
+    "cifar10/n2048": ("cifar10_n2048.pt", "cifar10"),
+    "cifar10/n4096": ("cifar10_n4096.pt", "cifar10"),
+    "imagenet64/n6656": ("imagenet64_n6656.pt", "imagenet64"),
     "imagenet64/n10240": ("imagenet64_n10240.pt", "imagenet64"),
     "imagenet64/n16384": ("imagenet64_n16384.pt", "imagenet64"),
 }

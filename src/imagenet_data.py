@@ -52,9 +52,7 @@ class _ImageNet64Folder(ImageFolder):
     def __init__(self, root: str) -> None:
         super().__init__(root, loader=lambda p: Image.open(p).convert("RGB"))
         # class_to_idx maps "00007" -> sorted_index; invert to recover ids.
-        self._idx_to_class_id = {
-            idx: int(name) for name, idx in self.class_to_idx.items()
-        }
+        self._idx_to_class_id = {idx: int(name) for name, idx in self.class_to_idx.items()}
 
     def __getitem__(self, index: int) -> tuple[Tensor, int]:
         image, folder_idx = super().__getitem__(index)
@@ -87,8 +85,11 @@ def build_imagenet64_dataloader(
     sampler: DistributedSampler | None = None
     if world_size > 1:
         sampler = DistributedSampler(
-            dataset, num_replicas=world_size, rank=rank,
-            shuffle=shuffle, drop_last=drop_last,
+            dataset,
+            num_replicas=world_size,
+            rank=rank,
+            shuffle=shuffle,
+            drop_last=drop_last,
         )
         shuffle = False
     return DataLoader(

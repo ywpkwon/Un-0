@@ -26,11 +26,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--num-steps", type=int, default=None)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument(
-        "--image-dir", default=None,
+        "--image-dir",
+        default=None,
         help="Directory to keep the generated samples. Defaults to a tempdir.",
     )
     parser.add_argument(
-        "--output", default=None,
+        "--output",
+        default=None,
         help="Optional JSON path. Writes {fid, checkpoint, num_samples, seed}.",
     )
     return parser
@@ -47,9 +49,7 @@ def evaluate(args: argparse.Namespace) -> float:
     # "ref_oscillator"; fall back to those so they load correctly.
     model = build_cifar10_model(
         n_oscillators=int(config.get("n_oscillators", 4096)),
-        n_conditional_oscillators=int(
-            config.get("n_conditional_oscillators", 8)
-        ),
+        n_conditional_oscillators=int(config.get("n_conditional_oscillators", 8)),
         class_dropout_prob=float(config.get("class_dropout_prob", 0.1)),
         num_steps=int(config.get("num_steps", 25)),
         decoder_in_channels=(
