@@ -7,9 +7,9 @@ from pathlib import Path
 
 import torch
 
-from common import resolve_device, save_sample_grid, seed_everything
-from data import NUM_CLASSES
-from model import (
+from un0.common import resolve_device, save_sample_grid, seed_everything
+from un0.data import NUM_CLASSES
+from un0.model import (
     PRETRAINED_NAMES,
     ConditionalImplicitKuramotoGenerator,
     build_cifar10_model,

@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import torch
 
-from losses import (
+from un0.losses import (
     DINOFeatureExtractor,
     conditional_drift_loss,
     conditional_drift_loss_for_views,
@@ -180,7 +180,7 @@ def test_cifar10_precomputed_skips_live_dino_on_reals() -> None:
         base = x_flat[:, :feat_dim]
         return [base for _ in range(num_views)]
 
-    with patch("losses.extract_feature_views", side_effect=fake_extract):
+    with patch("un0.losses.extract_feature_views", side_effect=fake_extract):
         loss, metrics = conditional_drift_loss(
             x_real,
             x_gen,
@@ -226,7 +226,7 @@ def test_precomputed_with_queue_runs_dino_only_on_gens() -> None:
         base = x_flat[:, :feat_dim]
         return [base for _ in range(num_views)]
 
-    with patch("losses.extract_feature_views", side_effect=fake_extract):
+    with patch("un0.losses.extract_feature_views", side_effect=fake_extract):
         loss, _ = conditional_drift_loss(
             x_real,
             x_gen,
@@ -289,7 +289,7 @@ def test_drift_returns_graph_connected_zero_when_no_class_has_positives() -> Non
 
 def test_dino_defaults_to_antialias_true() -> None:
     """CIFAR-faithful default: DINO bicubic resize uses antialias=True."""
-    with patch("losses.torch.hub.load", return_value=MagicMock()):
+    with patch("un0.losses.torch.hub.load", return_value=MagicMock()):
         extractor = DINOFeatureExtractor()
     extractor.backbone.get_intermediate_layers = MagicMock(return_value=[])
 
@@ -300,7 +300,7 @@ def test_dino_defaults_to_antialias_true() -> None:
         captured.update(kwargs)
         return real_interpolate(*args, **kwargs)
 
-    with patch("losses.F.interpolate", side_effect=_spy):
+    with patch("un0.losses.F.interpolate", side_effect=_spy):
         extractor(torch.zeros(1, 3 * 32 * 32), image_size=32)
     assert captured["antialias"] is True
 
@@ -308,7 +308,7 @@ def test_dino_defaults_to_antialias_true() -> None:
 def test_dino_antialias_false_when_constructed_for_imagenet() -> None:
     """ImageNet path: DINOFeatureExtractor(antialias=False) passes False through
     (the AA backward kernel is unregistered under torch.compile on CUDA)."""
-    with patch("losses.torch.hub.load", return_value=MagicMock()):
+    with patch("un0.losses.torch.hub.load", return_value=MagicMock()):
         extractor = DINOFeatureExtractor(antialias=False)
     extractor.backbone.get_intermediate_layers = MagicMock(return_value=[])
 
@@ -319,7 +319,7 @@ def test_dino_antialias_false_when_constructed_for_imagenet() -> None:
         captured.update(kwargs)
         return real_interpolate(*args, **kwargs)
 
-    with patch("losses.F.interpolate", side_effect=_spy):
+    with patch("un0.losses.F.interpolate", side_effect=_spy):
         extractor(torch.zeros(1, 3 * 64 * 64), image_size=64)
     assert captured["antialias"] is False
 

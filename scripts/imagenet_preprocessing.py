@@ -9,7 +9,7 @@ training pipeline in `openai/guided-diffusion`
 reference, so running OpenAI's ADM evaluator against `VIRTUAL_imagenet64_labeled.npz`
 yields FID/sFID/IS/Precision/Recall directly comparable to ADM, DiT, EDM, and
 EDM2. That evaluator is not included here; the in-training FID this repo computes
-(`src/metrics.py`) is clean-FID against custom validation statistics, which is a
+(`un0/metrics.py`) is clean-FID against custom validation statistics, which is a
 different number — a fast training-time proxy, not the headline ADM-evaluator FID.
 
 The pre-built ImageNet-64 dataset was produced by running this on each image

@@ -5,7 +5,7 @@ from pathlib import Path
 from PIL import Image
 import torch
 
-from imagenet_data import (
+from un0.imagenet_data import (
     NUM_CLASSES,
     build_imagenet64_dataloader,
     collate_image_batch,

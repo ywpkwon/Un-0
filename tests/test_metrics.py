@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import torch
 
-from metrics import _class_balanced_ids, _shard_for_rank, compute_fid
+from un0.metrics import _class_balanced_ids, _shard_for_rank, compute_fid
 
 
 def test_class_balanced_ids_divisible_case() -> None:
@@ -37,7 +37,7 @@ def test_compute_fid_cifar_path_uses_named_stats_and_balanced_ids() -> None:
 
     with (
         patch.dict("sys.modules", {"cleanfid": MagicMock(fid=fake_fid)}),
-        patch("metrics._dump_samples") as dump,
+        patch("un0.metrics._dump_samples") as dump,
     ):
         torch.manual_seed(0)
         value = compute_fid(
@@ -72,7 +72,7 @@ def test_compute_fid_imagenet_path_builds_custom_stats_and_uses_given_ids() -> N
 
     with (
         patch.dict("sys.modules", {"cleanfid": MagicMock(fid=fake_fid)}),
-        patch("metrics._dump_samples") as dump,
+        patch("un0.metrics._dump_samples") as dump,
     ):
         value = compute_fid(
             model,
@@ -103,7 +103,7 @@ def test_compute_fid_imagenet_reuses_existing_custom_stats() -> None:
 
     with (
         patch.dict("sys.modules", {"cleanfid": MagicMock(fid=fake_fid)}),
-        patch("metrics._dump_samples"),
+        patch("un0.metrics._dump_samples"),
     ):
         compute_fid(
             model,
@@ -122,13 +122,13 @@ def test_compute_fid_imagenet_reuses_existing_custom_stats() -> None:
 
 def test_dump_samples_uses_explicit_class_ids_in_order(tmp_path) -> None:
     """`_dump_samples` conditions sampling on the provided class_ids, in order."""
-    from metrics import _dump_samples
+    from un0.metrics import _dump_samples
 
     model = MagicMock()
     model.sample.return_value = torch.zeros(2, 3 * 64 * 64)
     class_ids = torch.tensor([7, 7, 42, 42])
 
-    with patch("metrics.save_image"):
+    with patch("un0.metrics.save_image"):
         _dump_samples(
             model,
             class_ids=class_ids,
@@ -175,8 +175,8 @@ def test_compute_fid_distributed_rank0_scores_others_nan(tmp_path) -> None:
     def run_rank(rank: int) -> tuple[float, MagicMock, MagicMock]:
         with (
             patch.dict("sys.modules", {"cleanfid": MagicMock(fid=fake_fid)}),
-            patch("metrics._dump_samples") as dump,
-            patch("metrics.dist.barrier") as barrier,
+            patch("un0.metrics._dump_samples") as dump,
+            patch("un0.metrics.dist.barrier") as barrier,
         ):
             value = compute_fid(
                 MagicMock(),

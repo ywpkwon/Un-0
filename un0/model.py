@@ -409,6 +409,24 @@ class ConditionalImplicitKuramotoGenerator(nn.Module):
         finally:
             self.train(was_training)
 
+    @torch.no_grad()
+    def sample_images(
+        self,
+        class_id: Tensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> Tensor:
+        """Generate samples as image tensors ``(B, 3, H, W)`` in ``[0, 1]``.
+
+        Convenience wrapper over :meth:`sample`, which returns the canonical
+        flat ``(B, 3*H*W)`` tensor in ``[-1, 1]`` used for training and FID.
+        Assumes square RGB output (3 channels, ``H == W``).
+        """
+        flat = self.sample(class_id, generator=generator)
+        size = round((flat.shape[1] // 3) ** 0.5)
+        images = flat.reshape(-1, 3, size, size)
+        return ((images + 1.0) * 0.5).clamp(0.0, 1.0)
+
     @classmethod
     def from_pretrained(
         cls,

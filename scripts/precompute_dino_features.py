@@ -4,16 +4,12 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-import sys
 
 import torch
 from tqdm import tqdm
 
-_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(_ROOT / "src"))
-
-from data import build_cifar10_dataloader  # noqa: E402
-from losses import DINOFeatureExtractor, extract_feature_views  # noqa: E402
+from un0.data import build_cifar10_dataloader
+from un0.losses import DINOFeatureExtractor, extract_feature_views
 
 FEATURE_BATCH_SIZE = 64
 

@@ -5,7 +5,7 @@ import hashlib
 import pytest
 import torch
 
-from model import (
+from un0.model import (
     ConditionalImplicitKuramotoGenerator,
     ConditionalKuramotoDynamics,
     ReadoutTransform,
@@ -383,3 +383,25 @@ def test_build_cifar10_model_param_fingerprint_unchanged(monkeypatch) -> None:
     assert _fingerprint(model.state_dict()) == (
         "532639f04f2480b1bea9316682f9b6dc8220a27173a1864fc0b9bd3b079b9bf5"
     )
+
+
+def test_sample_images_returns_chw_in_unit_range() -> None:
+    """sample_images reshapes flat samples to (B, 3, H, W) in [0, 1]."""
+    model = build_cifar10_model(n_oscillators=8, n_conditional_oscillators=2)
+    class_ids = torch.tensor([0, 1, 2])
+
+    flat = model.sample(class_ids)
+    images = model.sample_images(class_ids)
+
+    assert flat.shape == (3, 3 * 32 * 32)
+    assert images.shape == (3, 3, 32, 32)
+    assert float(images.min()) >= 0.0
+    assert float(images.max()) <= 1.0
+
+    # sample_images must be exactly the [-1, 1] -> [0, 1] mapping of sample()
+    g1 = torch.Generator().manual_seed(0)
+    g2 = torch.Generator().manual_seed(0)
+    flat_seeded = model.sample(class_ids, generator=g1)
+    images_seeded = model.sample_images(class_ids, generator=g2)
+    expected = ((flat_seeded.reshape(-1, 3, 32, 32) + 1.0) * 0.5).clamp(0.0, 1.0)
+    torch.testing.assert_close(images_seeded, expected)

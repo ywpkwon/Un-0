@@ -101,7 +101,7 @@ Two things these tables make explicit:
 - **Many values are not CLI args** (or their CLI default differs from the model
   builder's). Architecture and training constants live in `build_*_model()`
   defaults, in the training scripts' module constants (`WARMUP_FRACTION`,
-  `GRAD_CLIP_NORM`, `GAMMA`, `WEIGHT_DECAY`, …), and in `src/losses.py`
+  `GRAD_CLIP_NORM`, `GAMMA`, `WEIGHT_DECAY`, …), and in `un0/losses.py`
   (`DRIFT_TEMPERATURES`, `EPS`, the DINO extractor internals). A
   reproduction-fidelity check must cover all of these, not just `--help`.
 - **Precision** — the released CIFAR-10 checkpoints were trained in fp32, but the
@@ -118,7 +118,7 @@ by `num_GPUs×`. Confirm against the README's example launch.
 
 ## ImageNet-64: adapting the data path (bring-your-own data)
 
-`build_imagenet64_dataloader` in `src/imagenet_data.py` is a **reference**
+`build_imagenet64_dataloader` in `un0/imagenet_data.py` is a **reference**
 loader over a preprocessed PNG `ImageFolder` tree. To train on a different
 backend (object store, WebDataset, a streaming loader, …), swap that one module
 — everything downstream only needs the batch contract:

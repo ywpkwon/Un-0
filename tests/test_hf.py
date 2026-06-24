@@ -3,8 +3,8 @@ from __future__ import annotations
 import torch
 import pytest
 
-import model as model_mod
-from model import (
+import un0.model as model_mod
+from un0.model import (
     ConditionalImplicitKuramotoGenerator,
     build_cifar10_model,
     build_imagenet64_model,
@@ -86,7 +86,7 @@ def test_from_pretrained_imagenet64_round_trip(tmp_path, patch_download):
 def test_build_from_config_override_and_fallback():
     # Present arch keys override the builder default; absent keys fall back to it;
     # non-builder training keys (integration_method, batch_size) are ignored, not errors.
-    from model import _build_from_config, build_cifar10_model, build_imagenet64_model
+    from un0.model import _build_from_config, build_cifar10_model, build_imagenet64_model
 
     # cifar10: a present non-default relativization wins; absent encoding/solver fall back.
     cifar = _build_from_config(
@@ -146,7 +146,7 @@ def test_from_pretrained_uses_weights_only(tmp_path, patch_download, monkeypatch
 
 
 def test_inference_parser_requires_one_source():
-    import inference
+    import un0.inference as inference
 
     parser = inference.build_parser()
     # neither source -> error
@@ -155,8 +155,8 @@ def test_inference_parser_requires_one_source():
 
 
 def test_inference_parser_pretrained_choices():
-    import inference
-    from model import PRETRAINED_NAMES
+    import un0.inference as inference
+    from un0.model import PRETRAINED_NAMES
 
     parser = inference.build_parser()
     args = parser.parse_args(["--pretrained", "imagenet64/n16384"])

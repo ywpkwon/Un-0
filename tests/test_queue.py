@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 import torch
 
-from losses import PerClassQueue
+from un0.losses import PerClassQueue
 
 
 def _ready_ids(mask: torch.Tensor) -> list[int]:

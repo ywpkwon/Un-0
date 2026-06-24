@@ -41,8 +41,7 @@ eval = [
 ]
 
 [tool.setuptools]
-package-dir = {"" = "src"}
-packages = { find = { where = ["src"] } }
+packages = ["un0"]
 
 [[tool.uv.index]]
 name = "pytorch-cu128"
@@ -66,18 +65,18 @@ extend-ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"src/data.py" = [
+"un0/data.py" = [
     "PLC0415",
     "PLR0913",
 ]
-"src/inference.py" = [
+"un0/inference.py" = [
     "D103",
 ]
-"src/metrics.py" = [
+"un0/metrics.py" = [
     "PLC0415",
     "PLR0913",
 ]
-"src/losses.py" = [
+"un0/losses.py" = [
     "C901",
     "D100",
     "FBT001",
@@ -87,24 +86,24 @@ extend-ignore = [
     "PLR0913",
     "PLR2004",
 ]
-"src/model.py" = [
+"un0/model.py" = [
     "D413",
     "N806",
     "PLC0415",
     "PLR0913",
     "PLR2004",
 ]
-"src/train_cifar10.py" = [
+"un0/train_cifar10.py" = [
     "C901",
     "PLC0415",
     "PLR0912",
     "PLR0913",
     "PLR0915",
 ]
-"src/imagenet_data.py" = [
+"un0/imagenet_data.py" = [
     "PLR0913",
 ]
-"src/train_imagenet.py" = [
+"un0/train_imagenet.py" = [
     "C901",
     "PLC0415",
     "PLR0912",
@@ -119,7 +118,6 @@ extend-ignore = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]

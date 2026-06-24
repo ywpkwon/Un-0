@@ -58,12 +58,14 @@ config, so the right model is constructed automatically:
 
 ```python
 import torch
-from model import ConditionalImplicitKuramotoGenerator
+from un0 import ConditionalImplicitKuramotoGenerator
+from torchvision.utils import save_image  # already a dependency
 
 model = ConditionalImplicitKuramotoGenerator.from_pretrained("cifar10/n4096")
 
-class_ids = torch.tensor([0, 1, 2, 3, 4])     # one image per listed class
-samples = model.sample(class_ids)             # flat [-1, 1] tensors, (5, 3*32*32)
+class_ids = torch.tensor([0, 1, 2, 3, 4])      # one image per listed class
+images = model.sample_images(class_ids)         # (5, 3, 32, 32) in [0, 1]
+save_image(images, "samples.png", nrow=5)        # writes a viewable PNG
 ```
 
 Available names (CIFAR-10 by oscillator count, ImageNet-64 likewise; the three
@@ -79,12 +81,12 @@ name or a local checkpoint.
 
 ```bash
 # All 10 CIFAR-10 classes, 10 images each:
-uv run python src/inference.py \
+uv run python un0/inference.py \
     --checkpoint checkpoints/cifar10/final.pt \
     --output samples/cifar10.png
 
 # A subset of classes, from released weights:
-uv run python src/inference.py \
+uv run python un0/inference.py \
     --pretrained imagenet64/n16384 \
     --classes 0 1 207 \
     --samples-per-class 8 \
@@ -106,19 +108,19 @@ HuggingFace cache; later runs are instant.
 Single GPU:
 
 ```bash
-uv run python src/train_cifar10.py --checkpoint-dir checkpoints/cifar10
+uv run python un0/train_cifar10.py --checkpoint-dir checkpoints/cifar10
 ```
 
 Multi-GPU (8-GPU DDP, matching the reference effective batch of 8192):
 
 ```bash
-uv run torchrun --nproc_per_node=8 src/train_cifar10.py \
+uv run torchrun --nproc_per_node=8 un0/train_cifar10.py \
     --checkpoint-dir checkpoints/cifar10 \
     --wandb-project <your-wandb-project>
 ```
 
 The defaults reproduce the reference configuration. Every hyperparameter is a
-CLI flag — run `uv run python src/train_cifar10.py --help` for the full list and
+CLI flag — run `uv run python un0/train_cifar10.py --help` for the full list and
 its defaults. When `--wandb-project` is set, rank 0 logs per-step metrics and
 uploads a 10×10 class-conditional sample grid every 100 epochs.
 
@@ -133,7 +135,7 @@ view bank once, then train with `--queue-size 0` and
 uv run python scripts/precompute_dino_features.py \
     --output data/cifar10_train_dino_views.pt
 
-uv run python src/train_cifar10.py \
+uv run python un0/train_cifar10.py \
     --checkpoint-dir checkpoints/cifar10 \
     --queue-size 0 \
     --precomputed-dino-features data/cifar10_train_dino_views.pt
@@ -144,7 +146,7 @@ incompatible with this path.
 
 ### ImageNet-64
 
-ImageNet-64 uses a separate entry point, `src/train_imagenet.py`, and the
+ImageNet-64 uses a separate entry point, `un0/train_imagenet.py`, and the
 1000-class model from `build_imagenet64_model`.
 
 > **Bring your own ImageNet data.** Unlike CIFAR-10, ImageNet-64 training does
@@ -161,13 +163,13 @@ resize with a center crop, matching OpenAI's `VIRTUAL_imagenet64_labeled.npz`
 and the ADM pipeline so FID is comparable to ADM/EDM/DiT. Apply it to each
 source image and store the result losslessly as
 `<root>/<split>/<class_id:05d>/<index:08d>.png` — the layout
-`build_imagenet64_dataloader` (in `src/imagenet_data.py`) reads. How you iterate
+`build_imagenet64_dataloader` (in `un0/imagenet_data.py`) reads. How you iterate
 the source images and where you persist the tree is up to you.
 
 **2. Train** (8-GPU DDP):
 
 ```bash
-uv run torchrun --nproc_per_node=8 src/train_imagenet.py \
+uv run torchrun --nproc_per_node=8 un0/train_imagenet.py \
     --data-root /data/imagenet64/train \
     --val-root /data/imagenet64/val \
     --batch-size 2048 \
@@ -189,13 +191,13 @@ class-balanced so label marginals match the real set.
 
 ### CIFAR-10
 
-`src/eval.py` loads a checkpoint, generates class-balanced samples, and scores
+`un0/eval.py` loads a checkpoint, generates class-balanced samples, and scores
 them against the CIFAR-10 train split using `clean-fid`'s precomputed reference
 statistics:
 
 ```bash
 uv sync --group eval
-uv run python src/eval.py \
+uv run python un0/eval.py \
     --checkpoint checkpoints/cifar10/final.pt \
     --num-samples 50000 \
     --output fid.json
@@ -209,7 +211,7 @@ reference pipeline.
 ### ImageNet-64
 
 The only FID computed in this repo for ImageNet-64 is the **in-training proxy**
-logged by `train_imagenet.py`: clean-FID against custom validation statistics
+logged by `un0/train_imagenet.py`: clean-FID against custom validation statistics
 built from `--val-root`, conditioning generation on the real validation labels
 1-to-1. Under DDP the generation is sharded across ranks and scored on rank 0.
 

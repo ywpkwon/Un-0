@@ -7,7 +7,7 @@ import pytest
 
 def test_parser_requires_data_root() -> None:
     """--data-root is required; --val-root/--val-data-local plumbing is public."""
-    from train_imagenet import build_parser
+    from un0.train_imagenet import build_parser
 
     parser = build_parser()
     with pytest.raises(SystemExit):
@@ -20,7 +20,7 @@ def test_parser_requires_data_root() -> None:
 def test_fid_args_present_and_streaming_absent() -> None:
     """The public entry point exposes --val-root and must not import streaming
     nor reference the dropped --val-data-local arg."""
-    import train_imagenet
+    import un0.train_imagenet as train_imagenet
 
     parser = train_imagenet.build_parser()
     dests = {a.dest for a in parser._actions}
@@ -35,7 +35,7 @@ def test_read_val_labels_is_balanced_prefix(tmp_path) -> None:
     deterministic, ~class-balanced label prefix for 1-to-1 FID conditioning."""
     from PIL import Image
 
-    from train_imagenet import _read_val_labels
+    from un0.train_imagenet import _read_val_labels
 
     for c in (0, 1, 2, 3):
         d = tmp_path / f"{c:05d}"

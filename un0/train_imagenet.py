@@ -29,7 +29,7 @@ from torch.nn.parallel import DistributedDataParallel
 from torchvision.datasets import ImageFolder
 from tqdm.auto import tqdm
 
-from common import (
+from un0.common import (
     autocast_context,
     disable_cudnn_sdp_on_blackwell,
     disable_torchscript_gpu_fuser_on_blackwell,
@@ -38,10 +38,10 @@ from common import (
     save_sample_grid,
     seed_everything,
 )
-from decoupled_adamw import DecoupledAdamW
-from imagenet_data import NUM_CLASSES, build_imagenet64_dataloader
-from losses import DINOFeatureExtractor, PerClassQueue, conditional_drift_loss
-from model import build_imagenet64_model, prepare_class_ids_for_generation
+from un0.decoupled_adamw import DecoupledAdamW
+from un0.imagenet_data import NUM_CLASSES, build_imagenet64_dataloader
+from un0.losses import DINOFeatureExtractor, PerClassQueue, conditional_drift_loss
+from un0.model import build_imagenet64_model, prepare_class_ids_for_generation
 
 IMAGE_SIZE = 64
 WEIGHT_DECAY = 0.0

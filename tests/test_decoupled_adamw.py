@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import torch
 
-from decoupled_adamw import DecoupledAdamW
+from un0.decoupled_adamw import DecoupledAdamW
 
 
 def test_initial_lr_snapshot_per_group() -> None:

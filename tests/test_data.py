@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import torch
 
-from data import collate_image_batch
+from un0.data import collate_image_batch
 
 
 def test_collate_image_batch_flattens_normalizes_and_keeps_labels() -> None:

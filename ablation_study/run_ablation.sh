@@ -170,7 +170,7 @@ run_eval_wave() {
   log "Evaluating ${#dirs[@]} checkpoints (num_samples=${EVAL_NUM_SAMPLES})"
   for d in "${dirs[@]}"; do
     log "  GPU ${gpu}: eval ${d}"
-    CUDA_VISIBLE_DEVICES="${gpu}" uv run python src/eval.py \
+    CUDA_VISIBLE_DEVICES="${gpu}" uv run python un0/eval.py \
       --checkpoint "${d}final.pt" \
       --num-samples "${EVAL_NUM_SAMPLES}" \
       --batch-size "${EVAL_BATCH_SIZE}" \
@@ -238,7 +238,7 @@ run_long_wave() {
     [[ "${DRY_RUN}" != "1" ]] && mkdir -p "${run_dir}"
 
     local -a cmd=(
-      uv run python src/train_cifar10.py
+      uv run python un0/train_cifar10.py
       --seed "${SEED}"
       "${SWEEP_ARG}" "${best}"
       --epochs "${EPOCHS_LONG}"

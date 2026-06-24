@@ -8,14 +8,14 @@ from pathlib import Path
 
 import torch
 
-from common import (
+from un0.common import (
     disable_torchscript_gpu_fuser_on_blackwell,
     resolve_device,
     seed_everything,
 )
-from data import NUM_CLASSES
-from metrics import compute_fid
-from model import build_cifar10_model
+from un0.data import NUM_CLASSES
+from un0.metrics import compute_fid
+from un0.model import build_cifar10_model
 
 DEFAULT_NUM_SAMPLES = 50000
 DEFAULT_BATCH_SIZE = 256

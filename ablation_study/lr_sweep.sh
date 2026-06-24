@@ -1,6 +1,6 @@
 #!/bin/bash
 # CIFAR-10 class-conditional LR sweep launcher for Un0.
-# Drives the LR grid into the argparse-based src/train_cifar10.py.
+# Drives the LR grid into the argparse-based un0/train_cifar10.py.
 #
 # Each LR runs as its own single-GPU process (no DDP). Logs go to a
 # per-run dir under --output-root. W&B project + run name match
@@ -18,7 +18,7 @@ LR grid (log-spaced; one LR per --gpus entry):
   --gpus LIST             Comma-separated GPU ids, or "all". Default: all.
   --sweep-arg FLAG        train_cifar10.py flag the LR grid drives. Default: --lr.
 
-Training (passes through to src/train_cifar10.py):
+Training (passes through to un0/train_cifar10.py):
   --seed VALUE            Random seed. Default: 42.
   --epochs VALUE          Training epochs. Optional (uses default 2400).
   --batch-size VALUE      Batch size. Optional (uses default 2048).
@@ -188,7 +188,7 @@ for index in "${!GPUS[@]}"; do
   fi
 
   cmd=(
-    uv run python src/train_cifar10.py
+    uv run python un0/train_cifar10.py
     --seed "${SEED}"
     "${SWEEP_ARG}" "${lr}"
     --checkpoint-dir "${ckpt_dir}"
