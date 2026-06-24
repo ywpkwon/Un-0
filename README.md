@@ -22,16 +22,17 @@ motivation is in progress; it will be cross-referenced here when published. -->
 
 ### Results
 
-FID of the released checkpoints, by oscillator count. CIFAR-10 is scored with
-clean-FID; ImageNet-64 with the OpenAI ADM evaluator (the field-standard
-ImageNet-64 number), so the two columns are not directly comparable. See
-[Evaluation](#evaluation) for both methodologies.
+The tables below report FID for the released checkpoints, by oscillator count.
+CIFAR-10 is scored with [clean-FID](https://github.com/GaParmar/clean-fid); ImageNet-64 with the 
+[OpenAI ADM evaluator](https://github.com/openai/guided-diffusion/tree/main/evaluations)
+(the field-standard ImageNet-64 number), so the two columns are not directly
+comparable. See [Evaluation](#evaluation) for both methodologies.
 
-| CIFAR-10 | clean-FID | | ImageNet-64 | params | ADM FID |
-| --- | --- | --- | --- | --- | --- |
-| `cifar10/n4096` | 8.86 | | `imagenet64/n16384` | 322M | 6.74 |
-| `cifar10/n2048` | 9.38 | | `imagenet64/n10240` | 128M | 8.04 |
-| `cifar10/n1024` | 11.16 | | `imagenet64/n6656` | 56M | 8.36 |
+| CIFAR-10 | params | clean-FID | | ImageNet-64 | params | ADM FID |
+| --- | --- | --- | --- | --- | --- | --- |
+| `cifar10/n4096` | 19.4M | 8.86 | | `imagenet64/n16384` | 322M | 6.74 |
+| `cifar10/n2048` | 4.9M | 9.38 | | `imagenet64/n10240` | 130M | 8.04 |
+| `cifar10/n1024` | 1.3M | 11.16 | | `imagenet64/n6656` | 57M | 8.36 |
 
 ## Setup
 
@@ -52,9 +53,9 @@ Two optional dependency groups are pulled in only when you need them:
 
 ### Load released weights from Hugging Face
 
-The fastest way to see samples. Pretrained checkpoints are published on the
-Hub; load one by name and the architecture is rebuilt from the checkpoint's own
-config, so the right model is constructed automatically:
+The fastest way to try out the repo is to load a pretrained checkpoint from the
+Hugging Face Hub — the architecture is rebuilt from the checkpoint's own config,
+so the right model is constructed automatically:
 
 ```python
 import torch
@@ -68,24 +69,34 @@ images = model.sample_images(class_ids)         # (5, 3, 32, 32) in [0, 1]
 save_image(images, "samples.png", nrow=5)        # writes a viewable PNG
 ```
 
-Available names (CIFAR-10 by oscillator count, ImageNet-64 likewise; the three
-ImageNet sizes are ≈56m / 128m / 322m params):
+The snippet above writes `samples.png` — one image each for classes 0–4
+(airplane, automobile, bird, cat, deer):
+
+<p align="center">
+  <img src="assets/cifar10_samples.png" width="320" alt="CIFAR-10 samples for classes 0-4 from cifar10/n4096">
+</p>
+
+Six checkpoints are available, named `{task}/n{oscillators}`:
 
 `cifar10/n1024`, `cifar10/n2048`, `cifar10/n4096`, `imagenet64/n6656`,
 `imagenet64/n10240`, `imagenet64/n16384`.
 
+For example, `cifar10/n2048` means it's a checkpoint trained from cifar10, which has 2048
+oscillators in the Kuramoto model.
+
 ### Sample from a checkpoint via the CLI
 
-`inference.py` writes a class-conditional image grid. Point it at a released
-name or a local checkpoint.
+`inference.py` arranges all the samples into a single image grid (one PNG, one
+row per class) and writes it to `--output`. Point it at a released name or a
+local checkpoint.
 
 ```bash
-# All 10 CIFAR-10 classes, 10 images each:
+# All 10 CIFAR-10 classes, 10 images each → one 10×10 grid PNG:
 uv run python un0/inference.py \
     --checkpoint checkpoints/cifar10/final.pt \
     --output samples/cifar10.png
 
-# A subset of classes, from released weights:
+# A subset of classes, from released weights → one 3×8 grid PNG:
 uv run python un0/inference.py \
     --pretrained imagenet64/n16384 \
     --classes 0 1 207 \
@@ -103,7 +114,7 @@ Training has been verified on **NVIDIA B200, H200, and A100** GPUs.
 ### CIFAR-10
 
 Self-contained: the first run downloads `uoft-cs/cifar10` (~170 MB) into the
-HuggingFace cache; later runs are instant.
+HuggingFace cache (no account or token needed); later runs are instant.
 
 Single GPU:
 
@@ -150,12 +161,10 @@ ImageNet-64 uses a separate entry point, `un0/train_imagenet.py`, and the
 1000-class model from `build_imagenet64_model`.
 
 > **Bring your own ImageNet data.** Unlike CIFAR-10, ImageNet-64 training does
-> not download anything for you. Our internal runs read ImageNet from
-> cloud-hosted storage through a loader specific to that environment, which we
-> can't ship here. Instead the repo provides the reference 64×64 preprocessing
-> transform and a reference filesystem-backed dataloader; you supply the source
-> ImageNet images and adapt the loader to your own storage. What ships is enough
-> to reproduce the data path, not a turnkey download.
+> not download anything for you. The repo provides the reference 64×64
+> preprocessing transform and a reference filesystem-backed dataloader; you
+> supply the source ImageNet images and adapt the loader to your own storage.
+> What ships is enough to reproduce the data path, not a turnkey download.
 
 **1. Preprocess** ImageNet into a 64×64 PNG tree. `preprocess_imagenet` in
 `scripts/imagenet_preprocessing.py` is the reference transform: box-then-bicubic
@@ -186,8 +195,9 @@ preprocessed tree — point it at your own data and swap in your storage backend
 
 ## Evaluation
 
-We report **clean-FID** (Parmar et al., CVPR 2022). Generated samples are
-class-balanced so label marginals match the real set.
+We report **[clean-FID](https://github.com/GaParmar/clean-fid)** (Parmar et al.,
+CVPR 2022). Generated samples are class-balanced so label marginals match the
+real set.
 
 ### CIFAR-10
 
@@ -216,7 +226,8 @@ built from `--val-root`, conditioning generation on the real validation labels
 1-to-1. Under DDP the generation is sharded across ranks and scored on rank 0.
 
 The headline ImageNet-64 numbers reported by ADM/EDM/DiT/EDM2 instead come from
-OpenAI's ADM evaluator scored against `VIRTUAL_imagenet64_labeled.npz`. The
+OpenAI's [ADM evaluator](https://github.com/openai/guided-diffusion/tree/main/evaluations)
+scored against `VIRTUAL_imagenet64_labeled.npz`. The
 preprocessing transform matches that reference's pixels, so those results are
 comparable — but the ADM evaluator is a separate TensorFlow tool reporting a
 different number from clean-FID, and running it is left to the reader.
