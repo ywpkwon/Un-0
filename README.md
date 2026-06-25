@@ -21,8 +21,7 @@ checkpoints for [inference](#inference) and the full [training](#training)
 recipe to reproduce the results below. Training is verified on NVIDIA A100,
 H200, and B200 GPUs.
 
-<!-- A companion blogpost covering the background, dynamics, and research
-motivation is in progress; it will be cross-referenced here when published. -->
+For more details, please read [this blogpost](https://unconv.ai/blog/introducing-un-0-generating-images-with-coupled-oscillators/).
 
 ### Results
 
