@@ -37,6 +37,13 @@ jobs:
         uses: astral-sh/setup-uv@v8.2.0
         with:
           enable-cache: true
+          # setup-uv prunes pre-built wheels from the cache by default
+          # (`uv cache prune --ci`), assuming they're cheap to re-fetch. That
+          # assumption is wrong for the 782 MB cu128 torch wheel: pruning shrinks
+          # the cache to ~200 KB and every job re-downloads torch from the
+          # PyTorch CDN. Keep the wheels so the cache (~1.5 GB) actually skips
+          # the download on a hit.
+          prune-cache: false
           python-version: "3.13"
 
       - name: Install dependencies
