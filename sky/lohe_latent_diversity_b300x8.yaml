@@ -1,0 +1,102 @@
+name: un0-lohe-latent-diversity-b300x8
+
+resources:
+  accelerators: B300:8
+  use_spot: false
+
+workdir: .
+
+setup: |
+  set -euxo pipefail
+  export PATH="$HOME/.local/bin:$PATH"
+  uv sync --group dev --group logging --group eval
+
+run: |
+  set -euxo pipefail
+  export PATH="$HOME/.local/bin:$PATH"
+
+  if [[ -z "${WANDB_API_KEY:-}" ]]; then
+    echo "WANDB_API_KEY must be set for the Lohe diversity probe." >&2
+    exit 2
+  fi
+
+  nvidia-smi
+  git rev-parse --abbrev-ref HEAD || true
+  git log -1 --oneline || true
+
+  # Avoid concurrent torch.hub extraction races by forcing one DINO load before
+  # the LR sweep starts eight training processes.
+  rm -rf \
+    "$HOME"/.cache/torch/hub/facebookresearch-dinov2-* \
+    "$HOME"/.cache/torch/hub/facebookresearch_dinov2_* \
+    "$HOME"/.cache/torch/hub/7764ea0f912e53c92e82eb78a2a1631e92725fc8.zip
+  uv run python - <<'PY'
+  import torch
+  from un0.losses import DINOFeatureExtractor
+  from un0.model import build_cifar10_model
+
+  print("torch", torch.__version__)
+  print("cuda_available", torch.cuda.is_available())
+  print("cuda_devices", torch.cuda.device_count())
+  print("prewarming_dinov2")
+  DINOFeatureExtractor()
+  print("prewarmed_dinov2")
+
+  model = build_cifar10_model(
+      dynamics="lohe_fixed",
+      n_oscillators=256,
+      n_conditional_oscillators=256,
+      lohe_dim=128,
+      num_steps=1,
+      lohe_spatial_decoder=True,
+      lohe_decoder_grid=16,
+      lohe_latent_dim=64,
+      lohe_latent_hidden_dim=512,
+      lohe_latent_scale=1.0,
+  ).cuda().eval()
+  y = model(torch.arange(10, device="cuda"))
+  print("latent_spatial_lohe_smoke_shape", tuple(y.shape))
+  PY
+
+  mkdir -p outputs/logs
+  dump_failure_logs() {
+    status=$?
+    echo "Diversity probe failed with status ${status}; tailing recent logs." >&2
+    find outputs/logs -maxdepth 1 -type f -print -exec tail -n 200 {} \; || true
+    find outputs -path "*/train.log" -type f -print -exec tail -n 120 {} \; || true
+    exit "${status}"
+  }
+  trap dump_failure_logs ERR
+
+  run_probe() {
+    scale="$1"
+    project="cifar10_lohe_latent_spatial_diversity_probe_s${scale//./p}"
+    output_root="outputs/${project}"
+    log_file="outputs/logs/${project}.$(date +%Y%m%d_%H%M%S).log"
+
+    echo "Starting ${project}"
+    bash ablation_study/lohe_sweep.sh \
+      --gpus all \
+      --spatial-decoder \
+      --lohe-decoder-grid 16 \
+      --n-oscillators 256 \
+      --lohe-dims "128" \
+      --anchors "256" \
+      --dropouts "0.1" \
+      --lohe-latent-dim 64 \
+      --lohe-latent-hidden-dim 512 \
+      --lohe-latent-scale "${scale}" \
+      --min-lr 2e-4 \
+      --max-lr 1e-3 \
+      --epochs 200 \
+      --fid-every-epochs 200 \
+      --fid-num-samples 50000 \
+      --fid-batch-size 256 \
+      --project "${project}" \
+      --output-root "${output_root}" \
+      --no-kill \
+      2>&1 | tee "${log_file}"
+  }
+
+  run_probe "1.0"
+  run_probe "2.0"
