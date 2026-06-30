@@ -1,4 +1,4 @@
-name: un0-lohe-spatial-b300x8-sweep
+name: un0-lohe-spatial-b300x8-overnight
 
 resources:
   accelerators: B300:8
@@ -51,22 +51,22 @@ run: |
     exit "${status}"
   }
   trap dump_failure_logs ERR
-  log_file="outputs/logs/cifar10_lohe_spatial_probe.$(date +%Y%m%d_%H%M%S).log"
+  log_file="outputs/logs/cifar10_lohe_spatial_overnight.$(date +%Y%m%d_%H%M%S).log"
   bash ablation_study/lohe_sweep.sh \
     --gpus all \
     --spatial-decoder \
     --lohe-decoder-grid 16 \
     --n-oscillators 256 \
-    --lohe-dims "128 256" \
+    --lohe-dims "128 256 64" \
     --anchors "256 512" \
     --dropouts "0.1" \
     --min-lr 2e-4 \
     --max-lr 2e-3 \
-    --epochs 800 \
-    --fid-every-epochs 200 \
+    --epochs 1200 \
+    --fid-every-epochs 400 \
     --fid-num-samples 50000 \
     --fid-batch-size 256 \
-    --project cifar10_lohe_spatial_probe \
-    --output-root outputs/cifar10_lohe_spatial_probe \
+    --project cifar10_lohe_spatial_overnight \
+    --output-root outputs/cifar10_lohe_spatial_overnight \
     --no-kill \
     2>&1 | tee "${log_file}"
