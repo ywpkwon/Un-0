@@ -1,0 +1,68 @@
+name: un0-lohe-spatial-b300x8-sweep
+
+resources:
+  accelerators: B300:8
+  disk_size: 512
+  disk_tier: best
+  use_spot: false
+
+workdir: .
+
+setup: |
+  set -euxo pipefail
+  if ! command -v uv >/dev/null 2>&1; then
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+  fi
+  export PATH="$HOME/.local/bin:$PATH"
+  uv sync --group dev --group logging --group eval
+
+run: |
+  set -euxo pipefail
+  export PATH="$HOME/.local/bin:$PATH"
+
+  if [[ -z "${WANDB_API_KEY:-}" ]]; then
+    echo "WANDB_API_KEY must be set for the spatial Lohe sweep." >&2
+    exit 2
+  fi
+
+  nvidia-smi
+  uv run python - <<'PY'
+  import torch
+  from un0.model import build_cifar10_model
+
+  print("torch", torch.__version__)
+  print("cuda_available", torch.cuda.is_available())
+  print("cuda_devices", torch.cuda.device_count())
+
+  model = build_cifar10_model(
+      dynamics="lohe_fixed",
+      n_oscillators=256,
+      n_conditional_oscillators=256,
+      lohe_dim=128,
+      num_steps=1,
+      lohe_spatial_decoder=True,
+      lohe_decoder_grid=16,
+  )
+  y = model(torch.tensor([0, 1], dtype=torch.long))
+  print("spatial_lohe_smoke_shape", tuple(y.shape))
+  PY
+
+  mkdir -p outputs/logs
+  bash ablation_study/lohe_sweep.sh \
+    --gpus all \
+    --spatial-decoder \
+    --lohe-decoder-grid 16 \
+    --n-oscillators 256 \
+    --lohe-dims "128 256" \
+    --anchors "256 512" \
+    --dropouts "0.1" \
+    --min-lr 2e-4 \
+    --max-lr 2e-3 \
+    --epochs 800 \
+    --fid-every-epochs 200 \
+    --fid-num-samples 50000 \
+    --fid-batch-size 256 \
+    --project cifar10_lohe_spatial_probe \
+    --output-root outputs/cifar10_lohe_spatial_probe \
+    --no-kill \
+    > "outputs/logs/cifar10_lohe_spatial_probe.$(date +%Y%m%d_%H%M%S).log" 2>&1
