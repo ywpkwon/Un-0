@@ -2,17 +2,12 @@ name: un0-lohe-spatial-b300x8-sweep
 
 resources:
   accelerators: B300:8
-  disk_size: 512
-  disk_tier: best
   use_spot: false
 
 workdir: .
 
 setup: |
   set -euxo pipefail
-  if ! command -v uv >/dev/null 2>&1; then
-    curl -LsSf https://astral.sh/uv/install.sh | sh
-  fi
   export PATH="$HOME/.local/bin:$PATH"
   uv sync --group dev --group logging --group eval
 
@@ -48,6 +43,15 @@ run: |
   PY
 
   mkdir -p outputs/logs
+  dump_failure_logs() {
+    status=$?
+    echo "Sweep failed with status ${status}; tailing recent logs." >&2
+    find outputs/logs -maxdepth 1 -type f -print -exec tail -n 200 {} \; || true
+    find outputs -path "*/train.log" -type f -print -exec tail -n 120 {} \; || true
+    exit "${status}"
+  }
+  trap dump_failure_logs ERR
+  log_file="outputs/logs/cifar10_lohe_spatial_probe.$(date +%Y%m%d_%H%M%S).log"
   bash ablation_study/lohe_sweep.sh \
     --gpus all \
     --spatial-decoder \
@@ -65,4 +69,4 @@ run: |
     --project cifar10_lohe_spatial_probe \
     --output-root outputs/cifar10_lohe_spatial_probe \
     --no-kill \
-    > "outputs/logs/cifar10_lohe_spatial_probe.$(date +%Y%m%d_%H%M%S).log" 2>&1
+    2>&1 | tee "${log_file}"
