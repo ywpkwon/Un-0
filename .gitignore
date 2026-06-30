@@ -3,6 +3,9 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 *.egg-info/
+.env
+.env.*
+!.env.example
 
 checkpoints/
 outputs/

@@ -1,0 +1,34 @@
+name: un0-lohe-b300x8-smoke
+
+resources:
+  accelerators: B300:8
+  disk_size: 512
+  disk_tier: best
+  use_spot: false
+
+workdir: .
+
+setup: |
+  set -euxo pipefail
+  if ! command -v uv >/dev/null 2>&1; then
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+  fi
+  export PATH="$HOME/.local/bin:$PATH"
+  uv sync --group dev --group logging --group eval
+
+run: |
+  set -euxo pipefail
+  export PATH="$HOME/.local/bin:$PATH"
+  nvidia-smi
+  uv run pytest tests/test_model.py tests/test_hf.py -q
+  bash ablation_study/lohe_sweep.sh \
+    --gpus all \
+    --lohe-dims "2" \
+    --anchors "8" \
+    --dropouts "0.1" \
+    --epochs 1 \
+    --fid-every-epochs 0 \
+    --project cifar10_lohe_sky_smoke \
+    --output-root outputs/cifar10_lohe_sky_smoke \
+    --dry-run \
+    --no-kill
