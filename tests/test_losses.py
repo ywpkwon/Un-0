@@ -305,6 +305,23 @@ def test_dino_defaults_to_antialias_true() -> None:
     assert captured["antialias"] is True
 
 
+def test_dino_load_uses_process_lock() -> None:
+    """Parallel sweeps should not race while populating the torch.hub cache."""
+    lock = MagicMock()
+    lock.__enter__.return_value = None
+    lock.__exit__.return_value = None
+
+    with (
+        patch("un0.losses._torch_hub_load_lock", return_value=lock) as lock_factory,
+        patch("un0.losses.torch.hub.load", return_value=MagicMock()),
+    ):
+        DINOFeatureExtractor()
+
+    lock_factory.assert_called_once_with("dinov2")
+    lock.__enter__.assert_called_once()
+    lock.__exit__.assert_called_once()
+
+
 def test_dino_antialias_false_when_constructed_for_imagenet() -> None:
     """ImageNet path: DINOFeatureExtractor(antialias=False) passes False through
     (the AA backward kernel is unregistered under torch.compile on CUDA)."""

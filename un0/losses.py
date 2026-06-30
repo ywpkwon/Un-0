@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import contextmanager
+import fcntl
 import functools
 import math
+from pathlib import Path
 
 import torch
 from torch import Tensor, nn
@@ -26,6 +29,19 @@ def _get_drift_target_fn(*, compile_drift: bool) -> Callable[..., Tensor]:
     `conditional_drift_loss_for_views` stays eager.
     """
     return _compiled_drift_target() if compile_drift else _drift_target_for_class
+
+
+@contextmanager
+def _torch_hub_load_lock(name: str) -> Iterator[None]:
+    """Serialize torch.hub cache population across parallel sweep processes."""
+    hub_dir = Path(torch.hub.get_dir())
+    hub_dir.mkdir(parents=True, exist_ok=True)
+    with (hub_dir / f"{name}.lock").open("w") as lock_file:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
 
 def _pairwise_l2(x: Tensor, y: Tensor) -> Tensor:
@@ -198,12 +214,13 @@ class DINOFeatureExtractor(nn.Module):
         super().__init__()
         # Pinned to a specific dinov2 commit so the backbone weights and hubconf
         # stay fixed across upstream changes (the repo publishes no release tags).
-        self.backbone = torch.hub.load(
-            "facebookresearch/dinov2:7764ea0f912e53c92e82eb78a2a1631e92725fc8",
-            "dinov2_vits14",
-            trust_repo=True,
-            skip_validation=True,
-        )
+        with _torch_hub_load_lock("dinov2"):
+            self.backbone = torch.hub.load(
+                "facebookresearch/dinov2:7764ea0f912e53c92e82eb78a2a1631e92725fc8",
+                "dinov2_vits14",
+                trust_repo=True,
+                skip_validation=True,
+            )
         self.register_buffer(
             "imagenet_mean",
             torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1),
