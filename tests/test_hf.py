@@ -86,7 +86,12 @@ def test_from_pretrained_imagenet64_round_trip(tmp_path, patch_download):
 def test_build_from_config_override_and_fallback():
     # Present arch keys override the builder default; absent keys fall back to it;
     # non-builder training keys (integration_method, batch_size) are ignored, not errors.
-    from un0.model import build_cifar10_model, build_from_config, build_imagenet64_model
+    from un0.model import (
+        ConditionalFixedAnchorLoheDynamics,
+        build_cifar10_model,
+        build_from_config,
+        build_imagenet64_model,
+    )
 
     # cifar10: a present non-default relativization wins; absent encoding/solver fall back.
     cifar = build_from_config(
@@ -100,6 +105,19 @@ def test_build_from_config_override_and_fallback():
     )
     assert cifar.readout.relativization == "mean_relative"  # from config
     assert cifar.dynamics.n == 16  # from config
+
+    lohe = build_from_config(
+        build_cifar10_model,
+        {
+            "dynamics": "lohe_fixed",
+            "n_oscillators": 16,
+            "n_conditional_oscillators": 4,
+            "lohe_dim": 2,
+            "num_steps": 1,
+        },
+    )
+    assert isinstance(lohe.dynamics, ConditionalFixedAnchorLoheDynamics)
+    assert lohe.decoder.feature_dim == 32
 
     # imagenet64 with a near-arch-less config (the n16384 pre-patch schema):
     # relativization/parameterization fall back to builder defaults; the junk

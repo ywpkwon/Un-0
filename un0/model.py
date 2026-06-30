@@ -8,12 +8,14 @@ from typing import Literal
 
 import torch
 from torch import Tensor, nn
+from torch.nn import functional as F
 from torchdiffeq import odeint
 
 Encoding = Literal["raw", "sin", "sin_cos"]
 Relativization = Literal["absolute", "mean_relative", "ref_oscillator", "pairwise"]
 Parameterization = Literal["standard", "mup"]
 Solver = Literal["euler", "rk4"]
+DynamicsKind = Literal["kuramoto", "lohe_fixed"]
 
 
 def _kuramoto_velocity(theta: Tensor, omega: Tensor, coupling: Tensor) -> Tensor:
@@ -155,6 +157,111 @@ class ConditionalKuramotoDynamics(nn.Module):
         return torch.cat([main_vel, cond_vel], dim=1)
 
 
+class ConditionalFixedAnchorLoheDynamics(nn.Module):
+    """Class-conditional fixed-anchor Lohe dynamics with analytic equilibrium.
+
+    Each of the `n` free oscillators lives on ``S^(d-1)`` and is pulled toward a
+    learned bank of fixed anchors. For class ``c`` and oscillator ``i``:
+
+        h[c, i] = sum_a softplus(K_drive[c, i, a]) * anchor[a]
+        x*[c, i] = h[c, i] / ||h[c, i]||
+
+    This is the omega=0, fixed-anchor Lohe setting from fixed-query oscillator
+    attention. The training path uses ``x*`` directly; ``forward`` implements
+    the matching ODE velocity for finite-time experiments.
+    """
+
+    def __init__(
+        self,
+        *,
+        n_oscillators: int,
+        n_anchors: int,
+        oscillator_dim: int,
+        num_classes: int,
+        init_k_scale: float = 1.0,
+        parameterization: Parameterization = "standard",
+        eps: float = 1e-8,
+    ) -> None:
+        """Initialize fixed-anchor Lohe dynamics."""
+        super().__init__()
+        if n_oscillators < 1 or n_anchors < 1 or oscillator_dim < 2 or num_classes < 1:
+            raise ValueError(
+                "Need n_oscillators >= 1, n_anchors >= 1, oscillator_dim >= 2, "
+                "num_classes >= 1."
+            )
+        if parameterization not in ("standard", "mup"):
+            raise ValueError(
+                f"parameterization must be 'standard' or 'mup', got {parameterization!r}."
+            )
+        self.n = int(n_oscillators)
+        self.n_cond = int(n_anchors)
+        self.oscillator_dim = int(oscillator_dim)
+        self.num_classes = int(num_classes)
+        self.parameterization = parameterization
+        self.eps = float(eps)
+        self.uses_closed_form = True
+
+        if parameterization == "mup":
+            self._K_drive_scale = self.n_cond**-0.5
+            k_drive_init_scale = 1.0
+        else:
+            self._K_drive_scale = 1.0
+            k_drive_init_scale = self.n_cond**-0.5
+
+        self.anchor = nn.Parameter(torch.randn(self.n_cond, self.oscillator_dim))
+        self.K_drive = nn.Parameter(
+            init_k_scale * k_drive_init_scale * torch.randn(self.num_classes, self.n, self.n_cond)
+        )
+
+    @property
+    def state_dim(self) -> int:
+        """Flattened free-oscillator state dimension."""
+        return self.n * self.oscillator_dim
+
+    def _anchors(self) -> Tensor:
+        return F.normalize(self.anchor, dim=-1, eps=self.eps)
+
+    def _positive_drive(self, drive: Tensor) -> Tensor:
+        return F.softplus(drive) * self._K_drive_scale
+
+    def fixed_point(self, drive: Tensor) -> Tensor:
+        """Return the stable Lohe equilibrium shaped ``(batch, n, d)``."""
+        weights = self._positive_drive(drive)
+        h = torch.einsum("bna,ad->bnd", weights, self._anchors())
+        return F.normalize(h, dim=-1, eps=self.eps)
+
+    def sample_initial_state(
+        self,
+        num_samples: int,
+        *,
+        device: torch.device,
+        dtype: torch.dtype,
+        generator: torch.Generator | None = None,
+    ) -> Tensor:
+        """Sample free oscillator positions uniformly enough for ODE smoke tests."""
+        state = torch.randn(
+            num_samples,
+            self.n,
+            self.oscillator_dim,
+            device=device,
+            dtype=dtype,
+            generator=generator,
+        )
+        return F.normalize(state, dim=-1, eps=self.eps).reshape(num_samples, self.state_dim)
+
+    def state_to_features(self, state: Tensor) -> Tensor:
+        """Flatten vector-valued oscillator states for the decoder."""
+        return state.reshape(state.shape[0], self.n * self.oscillator_dim)
+
+    def forward(self, state: Tensor, _time: Tensor, drive: Tensor) -> Tensor:
+        """Compute Lohe velocity ``dx/dt = (I - xx^T) h`` for fixed anchors."""
+        x = state.reshape(state.shape[0], self.n, self.oscillator_dim)
+        weights = self._positive_drive(drive)
+        h = torch.einsum("bna,ad->bnd", weights, self._anchors())
+        projected = h - x * (x * h).sum(dim=-1, keepdim=True)
+        return projected.reshape(state.shape[0], self.state_dim)
+
+
 class ReadoutTransform(nn.Module):
     """Map raw oscillator phases to decoder features."""
 
@@ -193,6 +300,14 @@ class ReadoutTransform(nn.Module):
         if self.encoding == "sin_cos":
             return torch.cat([torch.sin(phases), torch.cos(phases)], dim=-1)
         return phases
+
+
+class IdentityReadout(nn.Module):
+    """Pass already-vector-valued oscillator features through unchanged."""
+
+    def forward(self, features: Tensor) -> Tensor:
+        """Return input features unchanged."""
+        return features
 
 
 class ResizeConvBlock(nn.Module):
@@ -336,6 +451,9 @@ class ConditionalImplicitKuramotoGenerator(nn.Module):
         generator: torch.Generator | None = None,
     ) -> Tensor:
         """Sample initial phases for main + driver uniformly from [-pi, pi)."""
+        sampler = getattr(self.dynamics, "sample_initial_state", None)
+        if sampler is not None:
+            return sampler(num_samples, device=device, dtype=dtype, generator=generator)
         dim = self.dynamics.state_dim
         return (
             torch.rand(num_samples, dim, device=device, dtype=dtype, generator=generator)
@@ -372,27 +490,40 @@ class ConditionalImplicitKuramotoGenerator(nn.Module):
         """
         param = next(self.parameters())
         batch = int(class_id.shape[0])
-        initial_state = self._sample_initial_state(
-            batch,
-            device=param.device,
-            dtype=param.dtype,
-            generator=generator,
-        )
         if self.num_steps == 0:
+            initial_state = self._sample_initial_state(
+                batch,
+                device=param.device,
+                dtype=param.dtype,
+                generator=generator,
+            )
             final_state = initial_state
         else:
             drive = self._class_drive(class_id, generator=generator)
-            time_grid = self._time_grid(device=param.device, dtype=param.dtype)
-            states = odeint(
-                lambda t, state: self.dynamics(state, t, drive),
-                initial_state,
-                time_grid,
-                method=self.solver,
-                options={"step_size": self.integration_time / self.num_steps},
-            )
-            final_state = states[-1]
-        main_phases = final_state[:, : self.dynamics.n]
-        return self.decoder(self.readout(main_phases))
+            if bool(getattr(self.dynamics, "uses_closed_form", False)):
+                final_state = self.dynamics.fixed_point(drive).reshape(batch, -1)
+            else:
+                initial_state = self._sample_initial_state(
+                    batch,
+                    device=param.device,
+                    dtype=param.dtype,
+                    generator=generator,
+                )
+                time_grid = self._time_grid(device=param.device, dtype=param.dtype)
+                states = odeint(
+                    lambda t, state: self.dynamics(state, t, drive),
+                    initial_state,
+                    time_grid,
+                    method=self.solver,
+                    options={"step_size": self.integration_time / self.num_steps},
+                )
+                final_state = states[-1]
+        state_to_features = getattr(self.dynamics, "state_to_features", None)
+        if state_to_features is None:
+            features = self.readout(final_state[:, : self.dynamics.n])
+        else:
+            features = self.readout(state_to_features(final_state))
+        return self.decoder(features)
 
     @torch.no_grad()
     def sample(
@@ -500,10 +631,18 @@ def build_cifar10_model(
     relativization: Relativization = "ref_oscillator",
     encoding: Encoding = "sin_cos",
     solver: Solver = "rk4",
+    dynamics: DynamicsKind = "kuramoto",
+    lohe_dim: int = 2,
 ) -> ConditionalImplicitKuramotoGenerator:
     """Build the CIFAR-10 class-conditional model used in the release."""
+    if dynamics not in ("kuramoto", "lohe_fixed"):
+        raise ValueError(f"dynamics must be 'kuramoto' or 'lohe_fixed', got {dynamics!r}.")
     # sin_cos concatenates sin and cos (2 * n); raw/sin pass n features through.
-    feature_dim = (2 if encoding == "sin_cos" else 1) * int(n_oscillators)
+    feature_dim = (
+        int(n_oscillators) * int(lohe_dim)
+        if dynamics == "lohe_fixed"
+        else (2 if encoding == "sin_cos" else 1) * int(n_oscillators)
+    )
     decoder_in_height = 4
     decoder_in_width = 4
     if decoder_in_channels is None:
@@ -515,22 +654,33 @@ def build_cifar10_model(
             )
         decoder_in_channels = feature_dim // spatial_features
 
-    dynamics = ConditionalKuramotoDynamics(
-        n_oscillators=int(n_oscillators),
-        n_conditional_oscillators=int(n_conditional_oscillators),
-        num_classes=10,
-        init_k_scale=1.0,
-        init_freq_scale=1.0,
-        parameterization=parameterization,
-    )
-    # Compile the velocity function: called 4 * num_steps times per integration
-    # with fixed shape (batch, n + n_cond), so Inductor fuses sin/cos +
-    # the matmuls + the einsum drive into a handful of kernels.
-    dynamics = torch.compile(dynamics)
-    readout = ReadoutTransform(
-        encoding=encoding,
-        relativization=relativization,
-    )
+    if dynamics == "kuramoto":
+        dynamics_module: nn.Module = ConditionalKuramotoDynamics(
+            n_oscillators=int(n_oscillators),
+            n_conditional_oscillators=int(n_conditional_oscillators),
+            num_classes=10,
+            init_k_scale=1.0,
+            init_freq_scale=1.0,
+            parameterization=parameterization,
+        )
+        # Compile the velocity function: called 4 * num_steps times per integration
+        # with fixed shape (batch, n + n_cond), so Inductor fuses sin/cos +
+        # the matmuls + the einsum drive into a handful of kernels.
+        dynamics_module = torch.compile(dynamics_module)
+        readout: nn.Module = ReadoutTransform(
+            encoding=encoding,
+            relativization=relativization,
+        )
+    else:
+        dynamics_module = ConditionalFixedAnchorLoheDynamics(
+            n_oscillators=int(n_oscillators),
+            n_anchors=int(n_conditional_oscillators),
+            oscillator_dim=int(lohe_dim),
+            num_classes=10,
+            init_k_scale=1.0,
+            parameterization=parameterization,
+        )
+        readout = IdentityReadout()
     decoder = ResizeConvDecoder(
         feature_dim=feature_dim,
         output_dim=3 * 32 * 32,
@@ -544,7 +694,7 @@ def build_cifar10_model(
     )
     decoder = torch.compile(decoder)
     return ConditionalImplicitKuramotoGenerator(
-        dynamics=dynamics,
+        dynamics=dynamics_module,
         readout=readout,
         decoder=decoder,
         class_dropout_prob=float(class_dropout_prob),

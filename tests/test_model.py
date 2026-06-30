@@ -7,7 +7,9 @@ import torch
 
 from un0.model import (
     ConditionalImplicitKuramotoGenerator,
+    ConditionalFixedAnchorLoheDynamics,
     ConditionalKuramotoDynamics,
+    IdentityReadout,
     ReadoutTransform,
     ResizeConvDecoder,
     build_cifar10_model,
@@ -285,6 +287,75 @@ def test_generator_euler_integration_runs_and_backprops() -> None:
     samples.square().mean().backward()
     assert samples.shape == (3, 16)
     assert dynamics.K_drive.grad is not None
+
+
+def test_fixed_anchor_lohe_closed_form_produces_features_and_gradients() -> None:
+    """The closed-form Lohe path trains anchors, class couplings, and decoder."""
+    dynamics = ConditionalFixedAnchorLoheDynamics(
+        n_oscillators=4,
+        n_anchors=3,
+        oscillator_dim=2,
+        num_classes=3,
+    )
+    decoder = ResizeConvDecoder(
+        feature_dim=8,
+        output_dim=16,
+        in_channels=2,
+        in_height=2,
+        in_width=2,
+        out_channels=1,
+        num_upsamples=1,
+    )
+    model = ConditionalImplicitKuramotoGenerator(
+        dynamics=dynamics,
+        readout=IdentityReadout(),
+        decoder=decoder,
+        num_steps=1,
+    )
+
+    samples = model(torch.tensor([0, 1, 2]))
+    samples.square().mean().backward()
+
+    assert samples.shape == (3, 16)
+    assert dynamics.anchor.grad is not None
+    assert dynamics.K_drive.grad is not None
+    assert next(decoder.parameters()).grad is not None
+
+
+def test_fixed_anchor_lohe_equilibrium_has_zero_velocity() -> None:
+    """Analytic fixed points should be stationary under the Lohe velocity."""
+    dynamics = ConditionalFixedAnchorLoheDynamics(
+        n_oscillators=4,
+        n_anchors=3,
+        oscillator_dim=3,
+        num_classes=3,
+    )
+    class_id = torch.tensor([0, 2])
+    drive = dynamics.K_drive[class_id]
+    fixed = dynamics.fixed_point(drive).reshape(class_id.shape[0], -1)
+
+    velocity = dynamics(fixed, torch.tensor(0.0), drive)
+
+    torch.testing.assert_close(velocity, torch.zeros_like(velocity), atol=1e-5, rtol=1e-5)
+
+
+def test_build_cifar10_model_can_use_fixed_anchor_lohe(monkeypatch) -> None:
+    """CIFAR builder switches to vector-valued Lohe features when requested."""
+    monkeypatch.setattr(torch, "compile", lambda m, *a, **k: m)
+    model = build_cifar10_model(
+        dynamics="lohe_fixed",
+        n_oscillators=8,
+        n_conditional_oscillators=4,
+        lohe_dim=2,
+        num_steps=1,
+    )
+
+    assert isinstance(model.dynamics, ConditionalFixedAnchorLoheDynamics)
+    assert model.dynamics.n == 8
+    assert model.dynamics.n_cond == 4
+    assert model.dynamics.oscillator_dim == 2
+    assert model.decoder.feature_dim == 16
+    assert model(torch.tensor([0, 1])).shape == (2, 3 * 32 * 32)
 
 
 def test_build_imagenet64_model_defaults() -> None:

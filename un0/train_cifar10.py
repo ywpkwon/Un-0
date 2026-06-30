@@ -70,6 +70,21 @@ def build_parser() -> argparse.ArgumentParser:
         help="Coupling-matrix parameterization.",
     )
     parser.add_argument(
+        "--dynamics",
+        choices=("kuramoto", "lohe_fixed"),
+        default="kuramoto",
+        help=(
+            "Dynamics family. 'lohe_fixed' uses omega=0 fixed-anchor Lohe "
+            "dynamics with its analytic equilibrium."
+        ),
+    )
+    parser.add_argument(
+        "--lohe-dim",
+        type=int,
+        default=2,
+        help="Sphere embedding dimension for --dynamics lohe_fixed.",
+    )
+    parser.add_argument(
         "--relativization",
         choices=("absolute", "mean_relative", "ref_oscillator", "pairwise"),
         default="mean_relative",
@@ -267,6 +282,8 @@ def train(args: argparse.Namespace) -> None:
         relativization=str(args.relativization),
         encoding=str(args.encoding),
         solver=str(args.solver),
+        dynamics=str(args.dynamics),
+        lohe_dim=int(args.lohe_dim),
     ).to(device)
     if args.freeze_dynamics:
         for param in raw_model.dynamics.parameters():

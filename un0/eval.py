@@ -66,6 +66,8 @@ def evaluate(args: argparse.Namespace) -> float:
         relativization=str(config.get("relativization", "ref_oscillator")),
         encoding=str(config.get("encoding", "sin_cos")),
         solver=str(config.get("solver", "rk4")),
+        dynamics=str(config.get("dynamics", "kuramoto")),
+        lohe_dim=int(config.get("lohe_dim", 2)),
     ).to(device)
     model.load_state_dict(state["model"])
     if args.num_steps is not None:

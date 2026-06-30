@@ -30,3 +30,27 @@ without launching, and `--no-sync` if dependencies are already synced.
 
 The best LR per experiment is written to `outputs/dynamics/best_lr.json`, and
 each sweep run's FID lands in its own `fid.json` under the run directory.
+
+## Fixed-anchor Lohe sweep
+
+The Lohe path keeps the same single evolving/free oscillator population, but
+replaces the evolving conditional oscillator block with learned fixed anchors.
+Training uses the omega=0 analytic equilibrium:
+
+    uv run python un0/train_cifar10.py \
+        --dynamics lohe_fixed \
+        --lohe-dim 2 \
+        --n-conditional-oscillators 8 \
+        --num-steps 1 \
+        --checkpoint-dir checkpoints/cifar10_lohe
+
+For a grid over Lohe sphere dimension, fixed-anchor count, class dropout, and
+learning rate:
+
+    ablation_study/lohe_sweep.sh \
+        --gpus all \
+        --lohe-dims "2 4" \
+        --anchors "4 8 16" \
+        --dropouts "0.0 0.1" \
+        --epochs 400 \
+        --project cifar10_lohe
