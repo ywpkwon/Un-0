@@ -16,6 +16,15 @@ run: |
   export PATH="$HOME/.local/bin:$PATH"
   nvidia-smi
   mkdir -p outputs/logs
+  dump_failure_logs() {
+    status=$?
+    echo "Sweep failed with status ${status}; tailing recent logs." >&2
+    find outputs/logs -maxdepth 1 -type f -print -exec tail -n 200 {} \; || true
+    find outputs -path "*/train.log" -type f -print -exec tail -n 120 {} \; || true
+    exit "${status}"
+  }
+  trap dump_failure_logs ERR
+  log_file="outputs/logs/cifar10_lohe_capacity_probe_fid50k.$(date +%Y%m%d_%H%M%S).log"
   bash ablation_study/lohe_sweep.sh \
     --gpus all \
     --lohe-dims "4 8" \
@@ -31,4 +40,4 @@ run: |
     --project cifar10_lohe_capacity_probe_fid50k \
     --output-root outputs/cifar10_lohe_capacity_probe_fid50k \
     --no-kill \
-    > outputs/logs/cifar10_lohe_capacity_probe_fid50k.$(date +%Y%m%d_%H%M%S).log 2>&1
+    2>&1 | tee "${log_file}"
