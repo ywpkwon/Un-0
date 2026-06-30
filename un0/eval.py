@@ -74,6 +74,11 @@ def evaluate(args: argparse.Namespace) -> float:
             if config.get("lohe_decoder_grid") is None
             else int(config["lohe_decoder_grid"])
         ),
+        lohe_latent_dim=int(config.get("lohe_latent_dim", 0)),
+        lohe_latent_class_dim=int(config.get("lohe_latent_class_dim", 64)),
+        lohe_latent_pos_dim=int(config.get("lohe_latent_pos_dim", 32)),
+        lohe_latent_hidden_dim=int(config.get("lohe_latent_hidden_dim", 512)),
+        lohe_latent_scale=float(config.get("lohe_latent_scale", 0.3)),
     ).to(device)
     model.load_state_dict(state["model"])
     if args.num_steps is not None:

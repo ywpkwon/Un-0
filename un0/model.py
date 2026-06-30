@@ -179,6 +179,11 @@ class ConditionalFixedAnchorLoheDynamics(nn.Module):
         n_anchors: int,
         oscillator_dim: int,
         num_classes: int,
+        latent_dim: int = 0,
+        latent_class_embed_dim: int = 64,
+        latent_pos_embed_dim: int = 32,
+        latent_hidden_dim: int = 512,
+        latent_delta_scale: float = 0.3,
         init_k_scale: float = 1.0,
         parameterization: Parameterization = "standard",
         eps: float = 1e-8,
@@ -201,6 +206,21 @@ class ConditionalFixedAnchorLoheDynamics(nn.Module):
         self.parameterization = parameterization
         self.eps = float(eps)
         self.uses_closed_form = True
+        self.latent_dim = int(latent_dim)
+        self.latent_class_embed_dim = int(latent_class_embed_dim)
+        self.latent_pos_embed_dim = int(latent_pos_embed_dim)
+        self.latent_hidden_dim = int(latent_hidden_dim)
+        self.latent_delta_scale = float(latent_delta_scale)
+        if self.latent_dim < 0:
+            raise ValueError(f"latent_dim must be >= 0, got {latent_dim}.")
+        if self.latent_dim > 0 and (
+            self.latent_class_embed_dim < 1
+            or self.latent_pos_embed_dim < 1
+            or self.latent_hidden_dim < 1
+        ):
+            raise ValueError(
+                "Latent-conditioned Lohe requires positive class, position, and hidden dims."
+            )
 
         if parameterization == "mup":
             self._K_drive_scale = self.n_cond**-0.5
@@ -213,6 +233,31 @@ class ConditionalFixedAnchorLoheDynamics(nn.Module):
         self.K_drive = nn.Parameter(
             init_k_scale * k_drive_init_scale * torch.randn(self.num_classes, self.n, self.n_cond)
         )
+        if self.latent_dim > 0:
+            self.class_embed = nn.Embedding(self.num_classes, self.latent_class_embed_dim)
+            self.null_class_embed = nn.Parameter(torch.zeros(self.latent_class_embed_dim))
+            self.position_embed = nn.Parameter(
+                0.02 * torch.randn(self.n, self.latent_pos_embed_dim)
+            )
+            latent_in_dim = (
+                self.latent_dim + self.latent_class_embed_dim + self.latent_pos_embed_dim
+            )
+            self.latent_drive_mlp = nn.Sequential(
+                nn.Linear(latent_in_dim, self.latent_hidden_dim),
+                nn.SiLU(),
+                nn.Linear(self.latent_hidden_dim, self.latent_hidden_dim),
+                nn.SiLU(),
+                nn.Linear(self.latent_hidden_dim, self.n_cond),
+            )
+            final = self.latent_drive_mlp[-1]
+            if isinstance(final, nn.Linear):
+                nn.init.normal_(final.weight, mean=0.0, std=0.02)
+                nn.init.zeros_(final.bias)
+        else:
+            self.class_embed = None
+            self.null_class_embed = None
+            self.position_embed = None
+            self.latent_drive_mlp = None
 
     @property
     def state_dim(self) -> int:
@@ -224,6 +269,49 @@ class ConditionalFixedAnchorLoheDynamics(nn.Module):
 
     def _positive_drive(self, drive: Tensor) -> Tensor:
         return F.softplus(drive) * self._K_drive_scale
+
+    def conditioned_drive(
+        self,
+        class_id: Tensor,
+        *,
+        class_keep: Tensor | None = None,
+        generator: torch.Generator | None = None,
+    ) -> Tensor:
+        """Return class drive, optionally perturbed by per-token latent variables.
+
+        Shapes for the latent-conditioned path:
+          z_tokens: [B, n, latent_dim]
+          class:    [B, n, latent_class_embed_dim]
+          pos:      [B, n, latent_pos_embed_dim]
+          delta:    [B, n, n_anchors]
+        """
+        base = self.K_drive[class_id]
+        if class_keep is not None:
+            keep = class_keep.to(dtype=base.dtype).view(-1, 1, 1)
+            base = base * keep
+        if self.latent_dim == 0:
+            return base
+
+        batch = int(class_id.shape[0])
+        device = base.device
+        dtype = base.dtype
+        z_tokens = torch.randn(
+            batch,
+            self.n,
+            self.latent_dim,
+            device=device,
+            dtype=dtype,
+            generator=generator,
+        )
+        class_tokens = self.class_embed(class_id).to(dtype=dtype)
+        if class_keep is not None:
+            null_tokens = self.null_class_embed.to(dtype=dtype).expand_as(class_tokens)
+            class_tokens = torch.where(class_keep.view(-1, 1), class_tokens, null_tokens)
+        class_tokens = class_tokens[:, None, :].expand(-1, self.n, -1)
+        pos_tokens = self.position_embed.to(dtype=dtype)[None, :, :].expand(batch, -1, -1)
+        latent_in = torch.cat([z_tokens, class_tokens, pos_tokens], dim=-1)
+        latent_delta = self.latent_drive_mlp(latent_in)
+        return base + self.latent_delta_scale * latent_delta
 
     def fixed_point(self, drive: Tensor) -> Tensor:
         """Return the stable Lohe equilibrium shaped ``(batch, n, d)``."""
@@ -505,9 +593,9 @@ class ConditionalImplicitKuramotoGenerator(nn.Module):
 
     def _class_drive(self, class_id: Tensor, *, generator: torch.Generator | None = None) -> Tensor:
         """Gather per-sample class drive, optionally zeroed by class dropout."""
-        drive = self.dynamics.K_drive[class_id]
+        class_keep: Tensor | None = None
         if self.training and self.class_dropout_prob > 0.0:
-            keep = (
+            class_keep = (
                 torch.rand(
                     class_id.shape[0],
                     device=class_id.device,
@@ -515,7 +603,12 @@ class ConditionalImplicitKuramotoGenerator(nn.Module):
                 )
                 >= self.class_dropout_prob
             )
-            drive = drive * keep.to(dtype=drive.dtype).view(-1, 1, 1)
+        conditioned_drive = getattr(self.dynamics, "conditioned_drive", None)
+        if conditioned_drive is not None:
+            return conditioned_drive(class_id, class_keep=class_keep, generator=generator)
+        drive = self.dynamics.K_drive[class_id]
+        if class_keep is not None:
+            drive = drive * class_keep.to(dtype=drive.dtype).view(-1, 1, 1)
         return drive
 
     def forward(
@@ -700,6 +793,11 @@ def build_cifar10_model(
     lohe_dim: int = 2,
     lohe_spatial_decoder: bool = False,
     lohe_decoder_grid: int | None = None,
+    lohe_latent_dim: int = 0,
+    lohe_latent_class_dim: int = 64,
+    lohe_latent_pos_dim: int = 32,
+    lohe_latent_hidden_dim: int = 512,
+    lohe_latent_scale: float = 0.3,
 ) -> ConditionalImplicitKuramotoGenerator:
     """Build the CIFAR-10 class-conditional model used in the release."""
     if dynamics not in ("kuramoto", "lohe_fixed"):
@@ -760,6 +858,11 @@ def build_cifar10_model(
             n_anchors=int(n_conditional_oscillators),
             oscillator_dim=int(lohe_dim),
             num_classes=10,
+            latent_dim=int(lohe_latent_dim),
+            latent_class_embed_dim=int(lohe_latent_class_dim),
+            latent_pos_embed_dim=int(lohe_latent_pos_dim),
+            latent_hidden_dim=int(lohe_latent_hidden_dim),
+            latent_delta_scale=float(lohe_latent_scale),
             init_k_scale=1.0,
             parameterization=parameterization,
         )

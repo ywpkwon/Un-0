@@ -103,6 +103,39 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--lohe-latent-dim",
+        type=int,
+        default=0,
+        help=(
+            "If >0, add per-token Gaussian latent variables to the closed-form "
+            "Lohe drive. This makes the equilibrium sample-dependent."
+        ),
+    )
+    parser.add_argument(
+        "--lohe-latent-class-dim",
+        type=int,
+        default=64,
+        help="Class embedding size used by latent-conditioned Lohe.",
+    )
+    parser.add_argument(
+        "--lohe-latent-pos-dim",
+        type=int,
+        default=32,
+        help="Learned spatial position embedding size used by latent-conditioned Lohe.",
+    )
+    parser.add_argument(
+        "--lohe-latent-hidden-dim",
+        type=int,
+        default=512,
+        help="Hidden width of the latent-conditioned Lohe drive MLP.",
+    )
+    parser.add_argument(
+        "--lohe-latent-scale",
+        type=float,
+        default=0.3,
+        help="Multiplier on the latent drive delta before adding it to the class drive.",
+    )
+    parser.add_argument(
         "--relativization",
         choices=("absolute", "mean_relative", "ref_oscillator", "pairwise"),
         default="mean_relative",
@@ -306,6 +339,11 @@ def train(args: argparse.Namespace) -> None:
         lohe_decoder_grid=(
             None if args.lohe_decoder_grid is None else int(args.lohe_decoder_grid)
         ),
+        lohe_latent_dim=int(args.lohe_latent_dim),
+        lohe_latent_class_dim=int(args.lohe_latent_class_dim),
+        lohe_latent_pos_dim=int(args.lohe_latent_pos_dim),
+        lohe_latent_hidden_dim=int(args.lohe_latent_hidden_dim),
+        lohe_latent_scale=float(args.lohe_latent_scale),
     ).to(device)
     if args.freeze_dynamics:
         for param in raw_model.dynamics.parameters():
