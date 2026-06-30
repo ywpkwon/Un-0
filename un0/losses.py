@@ -201,6 +201,8 @@ class DINOFeatureExtractor(nn.Module):
         self.backbone = torch.hub.load(
             "facebookresearch/dinov2:7764ea0f912e53c92e82eb78a2a1631e92725fc8",
             "dinov2_vits14",
+            trust_repo=True,
+            skip_validation=True,
         )
         self.register_buffer(
             "imagenet_mean",

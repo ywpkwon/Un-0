@@ -105,6 +105,18 @@ done
 REPO_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${REPO_DIR}"
 
+UV_BIN="${UV_BIN:-}"
+if [[ -z "${UV_BIN}" ]]; then
+  if command -v uv >/dev/null 2>&1; then
+    UV_BIN="$(command -v uv)"
+  elif [[ -x "${HOME}/.local/bin/uv" ]]; then
+    UV_BIN="${HOME}/.local/bin/uv"
+  else
+    echo "uv not found. Add uv to PATH or set UV_BIN=/path/to/uv." >&2
+    exit 2
+  fi
+fi
+
 # ---------- Resolve GPUs ----------
 if [[ "${GPUS_CSV}" == "all" ]]; then
   GPUS=()
@@ -188,7 +200,7 @@ for index in "${!GPUS[@]}"; do
   fi
 
   cmd=(
-    uv run python un0/train_cifar10.py
+    "${UV_BIN}" run python un0/train_cifar10.py
     --seed "${SEED}"
     "${SWEEP_ARG}" "${lr}"
     --checkpoint-dir "${ckpt_dir}"
@@ -236,7 +248,18 @@ if [[ "${DRY_RUN}" -eq 0 ]]; then
   echo "Status check:  nvidia-smi"
   if [[ "${WAIT}" -eq 1 ]]; then
     echo "Waiting for ${#PIDS[@]} runs to finish..."
-    wait
+    failed=0
+    for pid in "${PIDS[@]}"; do
+      status=0
+      wait "${pid}" || status=$?
+      if [[ "${status}" -ne 0 ]]; then
+        echo "Run process ${pid} failed with status ${status}." >&2
+        failed=1
+      fi
+    done
+    if [[ "${failed}" -ne 0 ]]; then
+      exit 1
+    fi
     echo "All runs finished."
   fi
 fi
