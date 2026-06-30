@@ -15,6 +15,8 @@ Outer Lohe grid:
   --anchors "4 8 16"         Space-separated fixed-anchor counts. Default: "4 8 16".
   --dropouts "0.0 0.1"       Space-separated class dropout probs. Default: "0.0 0.1".
   --n-oscillators N          Main free oscillators. Default: 4096.
+  --spatial-decoder          Treat Lohe oscillators as spatial tokens.
+  --lohe-decoder-grid N      Grid side length for --spatial-decoder.
 
 Inner LR sweep:
   --min-lr V                 Default: 5e-4.
@@ -55,6 +57,8 @@ PROJECT="cifar10_lohe"
 OUTPUT_ROOT="outputs/cifar10_lohe"
 KILL_FLAG=""
 DRY_RUN_FLAG=""
+SPATIAL_DECODER=0
+LOHE_DECODER_GRID=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -62,6 +66,8 @@ while [[ $# -gt 0 ]]; do
     --anchors)       ANCHORS="$2"; shift 2 ;;
     --dropouts)      DROPOUTS="$2"; shift 2 ;;
     --n-oscillators) N_OSCILLATORS="$2"; shift 2 ;;
+    --spatial-decoder) SPATIAL_DECODER=1; shift ;;
+    --lohe-decoder-grid) LOHE_DECODER_GRID="$2"; shift 2 ;;
     --min-lr)        MIN_LR="$2"; shift 2 ;;
     --max-lr)        MAX_LR="$2"; shift 2 ;;
     --gpus)          GPUS="$2"; shift 2 ;;
@@ -86,6 +92,10 @@ for dim in ${LOHE_DIMS}; do
   for anchors in ${ANCHORS}; do
     for dropout in ${DROPOUTS}; do
       tag="lohe_d${dim}_a${anchors}_drop${dropout}"
+      if [[ "${SPATIAL_DECODER}" -eq 1 ]]; then
+        tag="lohe_spatial_d${dim}_a${anchors}_drop${dropout}"
+        [[ -n "${LOHE_DECODER_GRID}" ]] && tag="lohe_spatial_g${LOHE_DECODER_GRID}_d${dim}_a${anchors}_drop${dropout}"
+      fi
       tag="${tag//./p}"
       sweep_root="${OUTPUT_ROOT}/${tag}"
       override=(
@@ -96,6 +106,10 @@ for dim in ${LOHE_DIMS}; do
         --class-dropout-prob "${dropout}"
         --num-steps 1
       )
+      if [[ "${SPATIAL_DECODER}" -eq 1 ]]; then
+        override+=(--lohe-spatial-decoder)
+        [[ -n "${LOHE_DECODER_GRID}" ]] && override+=(--lohe-decoder-grid "${LOHE_DECODER_GRID}")
+      fi
       printf -v override_string '%q ' "${override[@]}"
 
       cmd=(

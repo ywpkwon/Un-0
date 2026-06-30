@@ -85,6 +85,24 @@ def build_parser() -> argparse.ArgumentParser:
         help="Sphere embedding dimension for --dynamics lohe_fixed.",
     )
     parser.add_argument(
+        "--lohe-spatial-decoder",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=(
+            "For --dynamics lohe_fixed, interpret oscillators as spatial tokens "
+            "and lohe-dim as decoder channels."
+        ),
+    )
+    parser.add_argument(
+        "--lohe-decoder-grid",
+        type=int,
+        default=None,
+        help=(
+            "Spatial grid side length for --lohe-spatial-decoder. Defaults to "
+            "sqrt(n_oscillators)."
+        ),
+    )
+    parser.add_argument(
         "--relativization",
         choices=("absolute", "mean_relative", "ref_oscillator", "pairwise"),
         default="mean_relative",
@@ -284,6 +302,10 @@ def train(args: argparse.Namespace) -> None:
         solver=str(args.solver),
         dynamics=str(args.dynamics),
         lohe_dim=int(args.lohe_dim),
+        lohe_spatial_decoder=bool(args.lohe_spatial_decoder),
+        lohe_decoder_grid=(
+            None if args.lohe_decoder_grid is None else int(args.lohe_decoder_grid)
+        ),
     ).to(device)
     if args.freeze_dynamics:
         for param in raw_model.dynamics.parameters():

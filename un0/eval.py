@@ -68,6 +68,12 @@ def evaluate(args: argparse.Namespace) -> float:
         solver=str(config.get("solver", "rk4")),
         dynamics=str(config.get("dynamics", "kuramoto")),
         lohe_dim=int(config.get("lohe_dim", 2)),
+        lohe_spatial_decoder=bool(config.get("lohe_spatial_decoder", False)),
+        lohe_decoder_grid=(
+            None
+            if config.get("lohe_decoder_grid") is None
+            else int(config["lohe_decoder_grid"])
+        ),
     ).to(device)
     model.load_state_dict(state["model"])
     if args.num_steps is not None:

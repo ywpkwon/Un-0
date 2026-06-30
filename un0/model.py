@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 import inspect
+import math
 from typing import Literal
 
 import torch
@@ -310,6 +311,40 @@ class IdentityReadout(nn.Module):
         return features
 
 
+class LoheSpatialTokenReadout(nn.Module):
+    """Reshape Lohe oscillator tokens into a channel-first spatial feature map."""
+
+    def __init__(
+        self,
+        *,
+        n_oscillators: int,
+        oscillator_dim: int,
+        height: int,
+        width: int,
+    ) -> None:
+        """Initialize the token-to-spatial readout."""
+        super().__init__()
+        if n_oscillators != height * width:
+            raise ValueError(
+                "n_oscillators must match height * width for spatial Lohe readout. "
+                f"Got {n_oscillators} and {height} * {width}."
+            )
+        self.n_oscillators = int(n_oscillators)
+        self.oscillator_dim = int(oscillator_dim)
+        self.height = int(height)
+        self.width = int(width)
+
+    def forward(self, features: Tensor) -> Tensor:
+        """Return features shaped `(batch, oscillator_dim, height, width)`."""
+        tokens = features.reshape(
+            features.shape[0],
+            self.height,
+            self.width,
+            self.oscillator_dim,
+        )
+        return tokens.permute(0, 3, 1, 2).contiguous()
+
+
 class ResizeConvBlock(nn.Module):
     """Nearest-neighbor upsample followed by two convolutions."""
 
@@ -330,7 +365,7 @@ class ResizeConvBlock(nn.Module):
 
 
 class ResizeConvDecoder(nn.Module):
-    """Decode flat features to flattened images via resize convolutions."""
+    """Decode flat or spatial features to flattened images via resize convolutions."""
 
     def __init__(
         self,
@@ -397,8 +432,15 @@ class ResizeConvDecoder(nn.Module):
         nn.init.zeros_(self.to_output.bias)
 
     def forward(self, features: Tensor) -> Tensor:
-        """Decode features shaped `(batch, feature_dim)`."""
-        x = features.reshape(features.shape[0], self.in_channels, self.in_height, self.in_width)
+        """Decode features shaped `(batch, feature_dim)` or `(batch, channels, height, width)`."""
+        if features.ndim == 4:
+            expected = (self.in_channels, self.in_height, self.in_width)
+            actual = tuple(features.shape[1:])
+            if actual != expected:
+                raise ValueError(f"Expected spatial features with shape (*, {expected}), got {actual}.")
+            x = features
+        else:
+            x = features.reshape(features.shape[0], self.in_channels, self.in_height, self.in_width)
         x = self.to_output(self.cascade(x))
         if self.final_activation == "tanh":
             x = torch.tanh(x)
@@ -620,6 +662,29 @@ def prepare_class_ids_for_generation(
     return chosen.repeat_interleave(counts)
 
 
+def _infer_cifar_lohe_spatial_layout(
+    *,
+    n_oscillators: int,
+    requested_grid: int | None,
+) -> tuple[int, int, int]:
+    """Infer `(height, width, num_upsamples)` for CIFAR spatial-token Lohe."""
+    grid = math.isqrt(n_oscillators) if requested_grid is None else int(requested_grid)
+    if grid < 1 or grid * grid != int(n_oscillators):
+        raise ValueError(
+            "Spatial-token Lohe requires n_oscillators to equal grid^2. "
+            f"Got n_oscillators={n_oscillators}, grid={grid}."
+        )
+    if 32 % grid != 0:
+        raise ValueError(f"CIFAR spatial Lohe grid must divide 32, got grid={grid}.")
+    scale = 32 // grid
+    if scale < 1 or scale & (scale - 1):
+        raise ValueError(
+            "CIFAR spatial Lohe grid must require a power-of-two upsample to 32. "
+            f"Got grid={grid}, scale={scale}."
+        )
+    return grid, grid, int(math.log2(scale))
+
+
 def build_cifar10_model(
     *,
     n_oscillators: int = 4096,
@@ -633,6 +698,8 @@ def build_cifar10_model(
     solver: Solver = "rk4",
     dynamics: DynamicsKind = "kuramoto",
     lohe_dim: int = 2,
+    lohe_spatial_decoder: bool = False,
+    lohe_decoder_grid: int | None = None,
 ) -> ConditionalImplicitKuramotoGenerator:
     """Build the CIFAR-10 class-conditional model used in the release."""
     if dynamics not in ("kuramoto", "lohe_fixed"):
@@ -645,7 +712,23 @@ def build_cifar10_model(
     )
     decoder_in_height = 4
     decoder_in_width = 4
-    if decoder_in_channels is None:
+    decoder_num_upsamples = 3
+    if bool(lohe_spatial_decoder):
+        if dynamics != "lohe_fixed":
+            raise ValueError("--lohe-spatial-decoder is only valid with dynamics='lohe_fixed'.")
+        decoder_in_height, decoder_in_width, decoder_num_upsamples = (
+            _infer_cifar_lohe_spatial_layout(
+                n_oscillators=int(n_oscillators),
+                requested_grid=lohe_decoder_grid,
+            )
+        )
+        if decoder_in_channels is not None and int(decoder_in_channels) != int(lohe_dim):
+            raise ValueError(
+                "Spatial-token Lohe uses lohe_dim as decoder_in_channels. "
+                f"Got decoder_in_channels={decoder_in_channels}, lohe_dim={lohe_dim}."
+            )
+        decoder_in_channels = int(lohe_dim)
+    elif decoder_in_channels is None:
         spatial_features = decoder_in_height * decoder_in_width
         if feature_dim % spatial_features != 0:
             raise ValueError(
@@ -680,7 +763,15 @@ def build_cifar10_model(
             init_k_scale=1.0,
             parameterization=parameterization,
         )
-        readout = IdentityReadout()
+        if bool(lohe_spatial_decoder):
+            readout = LoheSpatialTokenReadout(
+                n_oscillators=int(n_oscillators),
+                oscillator_dim=int(lohe_dim),
+                height=decoder_in_height,
+                width=decoder_in_width,
+            )
+        else:
+            readout = IdentityReadout()
     decoder = ResizeConvDecoder(
         feature_dim=feature_dim,
         output_dim=3 * 32 * 32,
@@ -688,7 +779,7 @@ def build_cifar10_model(
         in_height=decoder_in_height,
         in_width=decoder_in_width,
         out_channels=3,
-        num_upsamples=3,
+        num_upsamples=decoder_num_upsamples,
         final_activation="tanh",
         init_output_gain=0.5,
     )
