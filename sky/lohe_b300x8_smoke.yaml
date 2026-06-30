@@ -2,17 +2,14 @@ name: un0-lohe-b300x8-smoke
 
 resources:
   accelerators: B300:8
-  disk_size: 512
-  disk_tier: best
   use_spot: false
 
 workdir: .
 
 setup: |
   set -euxo pipefail
-  if ! command -v uv >/dev/null 2>&1; then
-    curl -LsSf https://astral.sh/uv/install.sh | sh
-  fi
+  # Uncomment if the base image does not already provide uv.
+  # curl -LsSf https://astral.sh/uv/install.sh | sh
   export PATH="$HOME/.local/bin:$PATH"
   uv sync --group dev --group logging --group eval
 

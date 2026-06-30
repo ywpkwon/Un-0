@@ -1,0 +1,19 @@
+name: hello-world
+
+resources:
+  accelerators: B300:8   # Must be a multiple of 8 — fractions of nodes not supported
+  cpus: 32+
+
+setup: |
+  pip install torch
+
+run: |
+  python3 -c "
+  import torch
+  print('Hello from SkyPilot!')
+  print(f'CUDA available: {torch.cuda.is_available()}')
+  print(f'Number of GPUs: {torch.cuda.device_count()}')
+  for i in range(torch.cuda.device_count()):
+      print(f'  GPU {i}: {torch.cuda.get_device_name(i)}')
+  print('Hello World complete!')
+  "
