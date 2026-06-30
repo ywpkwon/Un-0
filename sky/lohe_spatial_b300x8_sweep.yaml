@@ -1,18 +1,13 @@
-name: un0-lohe-spatial-b300x8-sweep
+name: un0-lohe-spatial-b300x8-overnight
 
 resources:
   accelerators: B300:8
-  disk_size: 512
-  disk_tier: best
   use_spot: false
 
 workdir: .
 
 setup: |
   set -euxo pipefail
-  if ! command -v uv >/dev/null 2>&1; then
-    curl -LsSf https://astral.sh/uv/install.sh | sh
-  fi
   export PATH="$HOME/.local/bin:$PATH"
   uv sync --group dev --group logging --group eval
 
@@ -26,13 +21,21 @@ run: |
   fi
 
   nvidia-smi
+  rm -rf \
+    "$HOME"/.cache/torch/hub/facebookresearch-dinov2-* \
+    "$HOME"/.cache/torch/hub/facebookresearch_dinov2_* \
+    "$HOME"/.cache/torch/hub/7764ea0f912e53c92e82eb78a2a1631e92725fc8.zip
   uv run python - <<'PY'
   import torch
+  from un0.losses import DINOFeatureExtractor
   from un0.model import build_cifar10_model
 
   print("torch", torch.__version__)
   print("cuda_available", torch.cuda.is_available())
   print("cuda_devices", torch.cuda.device_count())
+  print("prewarming_dinov2")
+  DINOFeatureExtractor()
+  print("prewarmed_dinov2")
 
   model = build_cifar10_model(
       dynamics="lohe_fixed",
@@ -48,21 +51,30 @@ run: |
   PY
 
   mkdir -p outputs/logs
+  dump_failure_logs() {
+    status=$?
+    echo "Sweep failed with status ${status}; tailing recent logs." >&2
+    find outputs/logs -maxdepth 1 -type f -print -exec tail -n 200 {} \; || true
+    find outputs -path "*/train.log" -type f -print -exec tail -n 120 {} \; || true
+    exit "${status}"
+  }
+  trap dump_failure_logs ERR
+  log_file="outputs/logs/cifar10_lohe_spatial_overnight.$(date +%Y%m%d_%H%M%S).log"
   bash ablation_study/lohe_sweep.sh \
     --gpus all \
     --spatial-decoder \
     --lohe-decoder-grid 16 \
     --n-oscillators 256 \
-    --lohe-dims "128 256" \
+    --lohe-dims "128 256 64" \
     --anchors "256 512" \
     --dropouts "0.1" \
     --min-lr 2e-4 \
     --max-lr 2e-3 \
-    --epochs 800 \
-    --fid-every-epochs 200 \
+    --epochs 1200 \
+    --fid-every-epochs 400 \
     --fid-num-samples 50000 \
     --fid-batch-size 256 \
-    --project cifar10_lohe_spatial_probe \
-    --output-root outputs/cifar10_lohe_spatial_probe \
+    --project cifar10_lohe_spatial_overnight \
+    --output-root outputs/cifar10_lohe_spatial_overnight \
     --no-kill \
-    > "outputs/logs/cifar10_lohe_spatial_probe.$(date +%Y%m%d_%H%M%S).log" 2>&1
+    2>&1 | tee "${log_file}"
